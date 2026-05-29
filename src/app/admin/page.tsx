@@ -16,7 +16,7 @@ export default async function AdminPage() {
 
     if (error) {
         return (
-            <div className="min-h-[100dvh] flex items-center justify-center">
+            <div className="min-h-dvh flex items-center justify-center">
                 <p className="font-data text-[10px] tracking-widest text-accent uppercase">
                     Error loading leads
                 </p>
@@ -25,7 +25,7 @@ export default async function AdminPage() {
     }
 
     return (
-        <main className="min-h-[100dvh] bg-background">
+        <main className="min-h-dvh bg-background">
 
             {/* Top bar */}
             <div className="border-b border-line px-8 py-5 flex items-center justify-between">

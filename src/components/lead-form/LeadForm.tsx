@@ -33,8 +33,15 @@ const stagger = {
 }
 
 const fadeUp = {
-    initial: { opacity: 0, y: 16 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] } },
+    hidden: { opacity: 0, y: 12 },
+    animate: {
+        opacity: 1,
+        y: 0,
+        transition: {
+            duration: 0.5,
+            ease: [0.16, 1, 0.3, 1] as const,
+        },
+    },
 }
 
 export function LeadForm() {
@@ -93,10 +100,10 @@ export function LeadForm() {
                     className="flex flex-col gap-6 py-8"
                 >
                     <div className="w-8 h-px bg-[#C8102E]" />
-                    <p className="font-[family-name:var(--font-serif)] text-2xl font-light text-[#F0EBE1]">
+                    <p className="font-serif text-2xl font-light text-[#F0EBE1]">
                         We&apos;ll be in touch.
                     </p>
-                    <p className="font-[family-name:var(--font-sans)] text-sm font-light text-[#555] leading-relaxed max-w-sm">
+                    <p className="font-sans text-sm font-light text-[#555] leading-relaxed max-w-sm">
                         Your inquiry has been received and qualified. Expect a tailored
                         response in your inbox shortly.
                     </p>
@@ -149,7 +156,7 @@ export function LeadForm() {
                                 initial={{ opacity: 0, y: -8 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0 }}
-                                className="font-[family-name:var(--font-data)] text-[10px] 
+                                className="font-data text-[10px] 
                   tracking-widest text-[#C8102E]"
                             >
                                 {apiError}

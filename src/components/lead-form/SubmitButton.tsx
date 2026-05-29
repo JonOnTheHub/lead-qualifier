@@ -15,7 +15,7 @@ export function SubmitButton({ loading, success }: SubmitButtonProps) {
             whileHover={{ scale: loading || success ? 1 : 1.01 }}
             whileTap={{ scale: loading || success ? 1 : 0.98 }}
             className={`
-        relative w-full h-14 border font-[family-name:var(--font-data)] 
+        relative w-full h-14 border font-data 
         text-xs tracking-[0.3em] uppercase overflow-hidden
         transition-colors duration-500
         ${success
@@ -29,7 +29,7 @@ export function SubmitButton({ loading, success }: SubmitButtonProps) {
             {/* Shimmer on loading */}
             {loading && (
                 <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent 
+                    className="absolute inset-0 bg-linear-to-r from-transparent 
             via-[#C8102E]/10 to-transparent"
                     animate={{ x: ['-100%', '100%'] }}
                     transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}

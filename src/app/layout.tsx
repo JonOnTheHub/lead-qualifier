@@ -32,7 +32,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${plexSerif.variable} ${plexSans.variable} ${turretRoad.variable}`}>
-      <body className="bg-[#080808] text-[#F0EBE1] antialiased">
+      <body className="bg-background text-[#F0EBE1] antialiased">
         {children}
       </body>
     </html>
