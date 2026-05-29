@@ -1,5 +1,4 @@
 import { LeadForm } from '@/components/lead-form/LeadForm'
-import { StatusDot } from '@/components/ui/StatusDot'
 
 export default function Home() {
   return (
@@ -16,7 +15,6 @@ export default function Home() {
         {/* Top — wordmark */}
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <StatusDot />
             <span className="font-data text-[10px] 
               tracking-[0.3em] text-[#555] uppercase">
               Accepting Inquiries

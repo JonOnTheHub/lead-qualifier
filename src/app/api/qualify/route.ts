@@ -146,8 +146,11 @@ export async function POST(req: NextRequest) {
                         {
                             role: "system",
                             content: `You are an expert copywriter for a premium agency. 
-Draft personalized response emails based on lead analysis. 
+Draft personalized response emails based on lead analysis.
 Always sign emails as "Jon" — never use placeholders like [Your Name].
+Format the email with short paragraphs — maximum 2 sentences per paragraph.
+Each distinct thought gets its own paragraph separated by a blank line.
+Never write walls of text. White space is professionalism.
 Always call the draft_response_email tool. Never respond with plain text.`,
                         },
                         {
