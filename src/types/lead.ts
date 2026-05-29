@@ -37,3 +37,15 @@ export interface QualifyApiResponse {
     results?: AIToolResults
     error?: string
 }
+
+export interface UsageLog {
+    id: string
+    created_at: string
+    lead_id: string
+    model: string
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    turn: number
+    latency_ms: number
+}
