@@ -17,19 +17,18 @@ export function FormField({
     options, value, onChange, error, required,
 }: FormFieldProps) {
     const baseInput = `
-    w-full bg-transparent border-b border-[#222] 
-    text-[#F0EBE1] font-sans font-light
-    text-sm py-3 px-0 placeholder:text-[#333]
-    focus:outline-none focus:border-[#C8102E] 
-    transition-colors duration-300
-  `
+        w-full bg-transparent border-b border-[#333]
+        text-[#F0EBE1] font-sans font-normal
+        text-sm py-3 px-0 placeholder:text-[#555]
+        focus:outline-none focus:border-[#C8102E]
+        transition-colors duration-300
+    `
 
     return (
         <div className="flex flex-col gap-2">
             <label
                 htmlFor={name}
-                className="font-data text-[10px] 
-          tracking-[0.2em] text-[#555] uppercase"
+                className="font-data text-[10px] tracking-[0.2em] text-[#888] uppercase"
             >
                 {label}{required && <span className="text-[#C8102E] ml-1">*</span>}
             </label>
@@ -72,8 +71,7 @@ export function FormField({
             )}
 
             {error && (
-                <p className="font-data text-[10px] 
-          tracking-widest text-[#C8102E]">
+                <p className="font-data text-[10px] tracking-widest text-[#C8102E]">
                     {error}
                 </p>
             )}

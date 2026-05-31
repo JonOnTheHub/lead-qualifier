@@ -13,8 +13,8 @@
   --color-red: #c8102e;
   --color-red-dim: #8a0c20;
   --color-text: #f0ebe1;
-  --color-text-muted: #666666;
-  --color-text-dim: #333333;
+  --color-text-muted: #888888;
+--color-text-dim: #555555;
 }
 
 * {
