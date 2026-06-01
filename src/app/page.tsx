@@ -1,6 +1,20 @@
+'use client'
+
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { Typewriter } from '@/components/ui/Typewriter'
 import { LeadForm } from '@/components/lead-form/LeadForm'
 
 export default function Home() {
+  const [subVisible, setSubVisible] = useState(false)
+  const [formVisible, setFormVisible] = useState(false)
+
+  // Typewriter finishes → subheading fades in → 400ms later form reveals
+  function handleTypewriterComplete() {
+    setSubVisible(true)
+    setTimeout(() => setFormVisible(true), 400)
+  }
+
   return (
     <main className="min-h-dvh grid grid-cols-1 lg:grid-cols-2">
 
@@ -20,17 +34,28 @@ export default function Home() {
 
         <div className="flex flex-col gap-5 mt-8 lg:mt-0">
           <div className="w-8 h-px bg-[#C8102E]" />
+
+          {/* Typewriter headline */}
           <h1 className="font-serif font-normal
             text-4xl sm:text-5xl lg:text-6xl
             leading-[1.1] text-[#F0EBE1] tracking-tight">
-            Tell us what<br />
-            you&apos;re building.
+            <Typewriter
+              lines={['Tell us what', "you're building."]}
+              speed={35}
+              onComplete={handleTypewriterComplete}
+            />
           </h1>
-          <p className="font-sans font-normal text-sm
-            text-[#888] leading-relaxed max-w-sm">
+
+          {/* Subheading — fades in after typewriter */}
+          <motion.p
+            className="font-sans font-normal text-sm text-[#888] leading-relaxed max-w-sm"
+            initial={{ opacity: 0, y: 6 }}
+            animate={subVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
             Every inquiry is reviewed, qualified, and responded to with a
             brief tailored to your project. No templates. No delays.
-          </p>
+          </motion.p>
         </div>
 
         <div className="hidden lg:flex flex-col gap-2 mt-16">
@@ -56,7 +81,15 @@ export default function Home() {
             <div className="w-8 h-px bg-[#444]" />
           </div>
 
-          <LeadForm />
+          {/* Form mounts after subheading — avoids it fighting for attention */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={formVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <LeadForm />
+          </motion.div>
+
         </div>
       </div>
 

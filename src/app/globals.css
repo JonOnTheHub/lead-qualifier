@@ -14,7 +14,7 @@
   --color-red-dim: #8a0c20;
   --color-text: #f0ebe1;
   --color-text-muted: #888888;
---color-text-dim: #555555;
+  --color-text-dim: #555555;
 }
 
 * {
@@ -36,4 +36,14 @@
 
 ::-webkit-scrollbar-thumb {
   background: #c8102e;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
