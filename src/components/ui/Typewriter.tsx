@@ -42,8 +42,8 @@ export function Typewriter({ lines, speed = 28, onComplete, className }: Typewri
             {/* Cursor — solid while typing, blinks when done */}
             <span
                 className={`inline-block w-0.75 h-[0.85em] ml-1 mb-[-0.05em]
-          bg-[#C8102E] align-middle
-          ${done ? 'animate-[blink_1s_step-end_infinite]' : 'opacity-100'}`}
+  bg-accent align-middle
+  ${done ? 'animate-[blink_1s_step-end_infinite]' : 'opacity-100'}`}
             />
         </span>
     )

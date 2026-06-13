@@ -1,235 +1,256 @@
-import { NextRequest, NextResponse } from "next/server";
-import { groq, MODEL, analysisTools, emailTool } from "@/lib/groq";
-import { createAdminClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/email";
-import { notifySlack } from "@/lib/slack";
-import { RawLeadFormData, AIToolResults } from "@/types/lead";
-import { checkRateLimit } from "@/lib/ratelimit";
-import { withRetry } from "@/lib/retry";
-import Groq from "groq-sdk";
+import { NextRequest, NextResponse } from 'next/server'
+import { groq, MODEL, analysisTools, emailTool } from '@/lib/groq'
+import { createAdminClient } from '@/lib/supabase/server'
+import { sendEmail } from '@/lib/email'
+import { notifySlack } from '@/lib/slack'
+import { RawLeadFormData, AIToolResults } from '@/types/lead'
+import { checkRateLimit } from '@/lib/ratelimit'
+import { withRetry } from '@/lib/retry'
+import Groq from 'groq-sdk'
+
+// ─────────────────────────────────────────────
+// LANGUAGE DETECTION
+// Runs before the main pipeline.
+// Detects the language of the claimant's message
+// and returns a plain language name ("Spanish",
+// "French", etc.) that we inject into every
+// subsequent system prompt.
+// ─────────────────────────────────────────────
+
+async function detectLanguage(text: string): Promise<string> {
+    const res = await groq.chat.completions.create({
+        model: MODEL,
+        messages: [
+            {
+                role: 'system',
+                content: `You are a language detector. 
+        Respond with only the English name of the language the text is written in.
+        Examples: "English", "Spanish", "French", "Yoruba", "Arabic".
+        One word only. No punctuation. No explanation.`,
+            },
+            {
+                role: 'user',
+                content: text,
+            },
+        ],
+        max_tokens: 10,
+    })
+
+    return res.choices[0].message.content?.trim() ?? 'English'
+}
 
 export async function POST(req: NextRequest) {
-    const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-    const { allowed } = checkRateLimit(ip);
+    const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
+    const { allowed } = checkRateLimit(ip)
 
     if (!allowed) {
         return NextResponse.json(
-            { success: false, error: "Too many requests. Please wait a moment." },
-            { status: 429, headers: { "X-RateLimit-Remaining": "0" } },
-        );
+            { success: false, error: 'Too many requests. Please wait a moment.' },
+            { status: 429, headers: { 'X-RateLimit-Remaining': '0' } }
+        )
     }
 
     try {
-        const body: RawLeadFormData = await req.json();
-        const { name, email, company, budget, timeline, message } = body;
+        const body: RawLeadFormData = await req.json()
+        const { name, email, company, budget, timeline, message } = body
 
         if (!name || !email || !message) {
             return NextResponse.json(
-                { success: false, error: "Missing required fields" },
-                { status: 400 },
-            );
+                { success: false, error: 'Missing required fields' },
+                { status: 400 }
+            )
         }
 
+        // ─────────────────────────────────────────────
+        // DETECT LANGUAGE FIRST
+        // Cheap single call before the main pipeline.
+        // Result gets injected into every system prompt
+        // so the model responds in the claimant's language.
+        // ─────────────────────────────────────────────
+
+        const detectedLanguage = await detectLanguage(message)
+
+        const languageInstruction = detectedLanguage === 'English'
+            ? ''
+            : `IMPORTANT: The claimant wrote in ${detectedLanguage}. 
+         All your output — reasoning, intent, tone notes, and especially 
+         the email body and subject — must be written in ${detectedLanguage}. 
+         Do not respond in English unless the submission was in English.`
+
+        const firmContext = `You are an intake assistant for Better Call Jon, 
+      a personal injury law firm. You evaluate PI claims and support the 
+      intake process. You never give legal advice. You never discuss fees 
+      or payment arrangements. You never make promises about case outcomes. 
+      You are intake only. ${languageInstruction}`
+
         const userPrompt = `
-      Analyze this inbound lead and use all available tools in parallel:
+      Analyze this personal injury intake submission for Better Call Jon:
 
-      Name: ${name}
-      Company: ${company}
-      Budget: ${budget}
-      Timeline: ${timeline}
-      Message: ${message}
-    `;
-
-        const systemPrompt = `You are a lead qualification AI for a premium agency. 
-      You must call ALL THREE analysis tools simultaneously for every lead. 
-      Never skip a tool. Be precise and analytical.`;
+      Claimant Name: ${name}
+      Email: ${email}
+      Nature of Injury / What Happened: ${message}
+      Incident Date / Timeline: ${timeline}
+      At-Fault Party / Context: ${company}
+      Medical Treatment Received: ${budget}
+    `
 
         // ─────────────────────────────────────────────
         // TURN 1 — PARALLEL TOOL CALLS
-        // Wrapped in withRetry — if Groq is flaky,
-        // we back off and try up to 3 times before
-        // surfacing the error. Timer starts before
-        // the call so we capture real network latency.
         // ─────────────────────────────────────────────
 
-        const turn1Start = Date.now();
+        const turn1Start = Date.now()
 
         const turn1Response = await withRetry(
-            () =>
-                groq.chat.completions.create({
-                    model: MODEL,
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt },
-                    ],
-                    tools: analysisTools,
-                    tool_choice: "required",
-                }),
+            () => groq.chat.completions.create({
+                model: MODEL,
+                messages: [
+                    {
+                        role: 'system',
+                        content: `${firmContext}
+            You must call ALL THREE analysis tools simultaneously for every intake submission.
+            Be precise. Surface all legally relevant facts.`,
+                    },
+                    { role: 'user', content: userPrompt },
+                ],
+                tools: analysisTools,
+                tool_choice: 'required',
+            }),
             {
                 maxAttempts: 3,
                 baseDelayMs: 500,
                 onRetry: (attempt, err) =>
                     console.warn(`[qualify] turn1 retry ${attempt}:`, err),
-            },
-        );
+            }
+        )
 
-        const turn1Latency = Date.now() - turn1Start;
-
-        const turn1Message = turn1Response.choices[0].message;
-        const toolCalls = turn1Message.tool_calls;
+        const turn1Latency = Date.now() - turn1Start
+        const turn1Message = turn1Response.choices[0].message
+        const toolCalls = turn1Message.tool_calls
 
         if (!toolCalls || toolCalls.length === 0) {
-            throw new Error("Model did not call any tools");
+            throw new Error('Model did not call any tools')
         }
 
-        // ─────────────────────────────────────────────
-        // EXECUTE THE TOOLS
-        // ─────────────────────────────────────────────
-
-        const toolResults: Record<string, unknown> = {};
-
+        const toolResults: Record<string, unknown> = {}
         for (const call of toolCalls) {
-            const args = JSON.parse(call.function.arguments);
-            toolResults[call.function.name] = args;
+            toolResults[call.function.name] = JSON.parse(call.function.arguments)
         }
 
-        const classify = toolResults["classify_lead"] as {
-            classification: string;
-            confidence: number;
-            reasoning: string;
-        };
+        const classify = toolResults['classify_lead'] as {
+            classification: string
+            confidence: number
+            reasoning: string
+        }
 
-        const intent = toolResults["extract_intent"] as {
-            intent: string;
-            needs: string[];
-        };
+        const intent = toolResults['extract_intent'] as {
+            intent: string
+            needs: string[]
+        }
 
-        const sentiment = toolResults["analyze_sentiment"] as {
-            sentiment: string;
-            urgency_score: number;
-            tone_notes: string;
-        };
-
+        const sentiment = toolResults['analyze_sentiment'] as {
+            sentiment: string
+            urgency_score: number
+            tone_notes: string
+        }
 
         // ─────────────────────────────────────────────
         // TURN 2 — EMAIL DRAFT
-        // Instead of passing raw tool_result messages
-        // (which confuse the model into hallucinating
-        // tool names from Turn 1), we summarize the
-        // analysis as plain text. Clean context =
-        // deterministic tool call.
+        // Plain text summary passed as context.
+        // Language instruction carried through so the
+        // email arrives in the claimant's language.
         // ─────────────────────────────────────────────
 
         const analysisSummary = `
-  Lead analysis complete. Use this to draft the email:
+      Intake analysis complete for Better Call Jon. Draft the response email:
 
-  Classification: ${classify.classification} (${Math.round(classify.confidence * 100)}% confidence)
-  Reasoning: ${classify.reasoning}
+      Case Classification: ${classify.classification} (${Math.round(classify.confidence * 100)}% confidence)
+      Reasoning: ${classify.reasoning}
 
-  Intent: ${intent.intent}
-  Needs: ${intent.needs.join(", ")}
+      Claim Summary: ${intent.intent}
+      Key Facts: ${intent.needs.join(', ')}
 
-  Sentiment: ${sentiment.sentiment}
-  Urgency: ${sentiment.urgency_score}/10
-  Tone notes: ${sentiment.tone_notes}
+      Claimant Sentiment: ${sentiment.sentiment}
+      Urgency: ${sentiment.urgency_score}/10
+      Tone Notes: ${sentiment.tone_notes}
 
-  Now call draft_response_email for ${name} at ${company} (${email}).
-`;
+      Draft a response email for ${name}. 
+      Remember: no legal advice, no fee discussion, intake acknowledgment only.
+      ${languageInstruction}
+    `
 
-        const turn2Start = Date.now();
+        const turn2Start = Date.now()
 
         const turn2Response = await withRetry(
-            () =>
-                groq.chat.completions.create({
-                    model: MODEL,
-                    messages: [
-                        {
-                            role: "system",
-                            content: `You are an expert copywriter for a premium agency. 
-Draft personalized response emails based on lead analysis.
-Always sign emails as "Jon" — never use placeholders like [Your Name].
-Format the email with short paragraphs — maximum 2 sentences per paragraph.
-Each distinct thought gets its own paragraph separated by a blank line.
-Never write walls of text. White space is professionalism.
-Always call the draft_response_email tool. Never respond with plain text.`,
-                        },
-                        {
-                            role: "user",
-                            content: analysisSummary,
-                        },
-                    ],
-                    tools: emailTool,
-                    tool_choice: "required",
-                }),
+            () => groq.chat.completions.create({
+                model: MODEL,
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are a professional legal intake coordinator at Better Call Jon, 
+            a personal injury law firm. Draft empathetic, professional response emails.
+            Never give legal advice. Never discuss fees. Never promise outcomes.
+            Always sign as "The Intake Team at Better Call Jon".
+            Short paragraphs. Human tone. Clear next step.
+            ${languageInstruction}
+            Always call the draft_response_email tool.`,
+                    },
+                    { role: 'user', content: analysisSummary },
+                ],
+                tools: emailTool,
+                tool_choice: 'required',
+            }),
             {
                 maxAttempts: 3,
                 baseDelayMs: 500,
                 onRetry: (attempt, err) =>
                     console.warn(`[qualify] turn2 retry ${attempt}:`, err),
-            },
-        );
+            }
+        )
 
-        const turn2Latency = Date.now() - turn2Start;
+        const turn2Latency = Date.now() - turn2Start
+        const emailCall = turn2Response.choices[0].message.tool_calls?.[0]
 
-        const emailCall = turn2Response.choices[0].message.tool_calls?.[0];
-
-        if (!emailCall) {
-            throw new Error("Model did not draft the email");
-        }
+        if (!emailCall) throw new Error('Model did not draft the email')
 
         const emailDraft = JSON.parse(emailCall.function.arguments) as {
-            email_subject: string;
-            email_body: string;
-        };
-
-        // ─────────────────────────────────────────────
-        // ASSEMBLE FINAL RESULTS
-        // ─────────────────────────────────────────────
+            email_subject: string
+            email_body: string
+        }
 
         const aiResults: AIToolResults = {
-            classification:
-                classify.classification as AIToolResults["classification"],
+            classification: classify.classification as AIToolResults['classification'],
             confidence: classify.confidence,
             reasoning: classify.reasoning,
             intent: intent.intent,
             needs: intent.needs,
-            sentiment: sentiment.sentiment as AIToolResults["sentiment"],
+            sentiment: sentiment.sentiment as AIToolResults['sentiment'],
             urgency_score: sentiment.urgency_score,
             tone_notes: sentiment.tone_notes,
             email_subject: emailDraft.email_subject,
             email_body: emailDraft.email_body,
-        };
+        }
 
-        // ─────────────────────────────────────────────
-        // STORAGE + NOTIFICATIONS
-        // ─────────────────────────────────────────────
-
-        const supabase = createAdminClient();
+        const supabase = createAdminClient()
 
         const { data: lead, error: dbError } = await supabase
-            .from("leads")
+            .from('leads')
             .insert({
-                name,
-                email,
-                company,
-                budget,
-                timeline,
-                message,
+                name, email, company, budget, timeline, message,
                 ...aiResults,
                 email_sent: false,
                 slack_notified: false,
             })
             .select()
-            .single();
+            .single()
 
-        if (dbError) throw new Error(`Supabase insert failed: ${dbError.message}`);
+        if (dbError) throw new Error(`Supabase insert failed: ${dbError.message}`)
 
-        // Email + Slack fire concurrently
         const [emailSent, slackSent] = await Promise.allSettled([
             sendEmail({
                 to: email,
                 subject: emailDraft.email_subject,
                 body: emailDraft.email_body,
+                firmName: 'Better Call Jon',
             }),
             notifySlack({
                 name,
@@ -239,26 +260,17 @@ Always call the draft_response_email tool. Never respond with plain text.`,
                 intent: aiResults.intent,
                 lead_id: lead.id,
             }),
-        ]);
+        ])
 
-        // Update sent flags
         await supabase
-            .from("leads")
+            .from('leads')
             .update({
-                email_sent: emailSent.status === "fulfilled",
-                slack_notified: slackSent.status === "fulfilled",
+                email_sent: emailSent.status === 'fulfilled',
+                slack_notified: slackSent.status === 'fulfilled',
             })
-            .eq("id", lead.id);
+            .eq('id', lead.id)
 
-        // ─────────────────────────────────────────────
-        // USAGE TRACKING
-        // Log token counts and latency for both turns.
-        // Groq returns usage on every completion —
-        // we store it so you can monitor costs as you
-        // scale or swap models.
-        // ─────────────────────────────────────────────
-
-        await supabase.from("usage_logs").insert([
+        await supabase.from('usage_logs').insert([
             {
                 lead_id: lead.id,
                 model: MODEL,
@@ -277,18 +289,19 @@ Always call the draft_response_email tool. Never respond with plain text.`,
                 turn: 2,
                 latency_ms: turn2Latency,
             },
-        ]);
+        ])
 
         return NextResponse.json({
             success: true,
             lead_id: lead.id,
             results: aiResults,
-        });
+        })
+
     } catch (error) {
-        console.error("[qualify] error:", error);
+        console.error('[qualify] error:', error)
         return NextResponse.json(
-            { success: false, error: "Qualification failed. Please try again." },
-            { status: 500 },
-        );
+            { success: false, error: 'Intake submission failed. Please try again.' },
+            { status: 500 }
+        )
     }
 }

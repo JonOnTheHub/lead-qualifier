@@ -17,11 +17,11 @@ export function FormField({
     options, value, onChange, error, required,
 }: FormFieldProps) {
     const baseInput = `
-        w-full bg-transparent border-b border-[#333]
-        text-[#F0EBE1] font-sans font-normal
-        text-sm py-3 px-0 placeholder:text-[#555]
-        focus:outline-none focus:border-[#C8102E]
-        transition-colors duration-300
+  w-full bg-transparent border-b border-[#1E2D45]
+  text-[#E8D9B0] font-sans font-normal
+  text-sm py-3 px-0 placeholder:text-[#4A5A72]
+  focus:outline-none focus:border-[#B8C722]
+  transition-colors duration-300
     `
 
     return (

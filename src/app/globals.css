@@ -5,45 +5,29 @@
   --font-sans: var(--font-sans);
   --font-data: var(--font-data);
 
-  --color-background: #080808;
-  --color-surface: #0f0f0f;
-  --color-surface-2: #161616;
-  --color-border: #222222;
-  --color-border-subtle: #1a1a1a;
-  --color-red: #c8102e;
-  --color-red-dim: #8a0c20;
-  --color-text: #f0ebe1;
-  --color-text-muted: #888888;
-  --color-text-dim: #555555;
+  --color-background: #0B1120;
+  --color-surface: #111827;
+  --color-surface-2: #1a2235;
+  --color-border: #1E2D45;
+  --color-border-subtle: #162035;
+  --color-accent: #B8C722;
+  --color-accent-dim: #8a9619;
+  --color-text: #E8D9B0;
+  --color-text-muted: #8A9BB5;
+  --color-text-dim: #4A5A72;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-::selection {
-  background: #c8102e;
-  color: #f0ebe1;
-}
+::selection { background: #B8C722; color: #0B1120; }
 
-::-webkit-scrollbar {
-  width: 1px;
-}
-
-::-webkit-scrollbar-track {
-  background: #080808;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c8102e;
-}
+::-webkit-scrollbar { width: 1px; }
+::-webkit-scrollbar-track { background: #0B1120; }
+::-webkit-scrollbar-thumb { background: #B8C722; }
 
 @keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
+
+option { background: #111827; color: #E8D9B0; }

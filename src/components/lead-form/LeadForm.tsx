@@ -6,20 +6,21 @@ import { FormField } from './FormField'
 import { SubmitButton } from './SubmitButton'
 import { RawLeadFormData, QualifyApiResponse } from '@/types/lead'
 
-const BUDGET_OPTIONS = [
-    { value: 'under-5k', label: 'Under $5,000' },
-    { value: '5k-15k', label: '$5,000 – $15,000' },
-    { value: '15k-50k', label: '$15,000 – $50,000' },
-    { value: '50k-plus', label: '$50,000+' },
-    { value: 'undisclosed', label: 'Prefer not to say' },
+const TREATMENT_OPTIONS = [
+    { value: 'er-visit', label: 'Emergency room visit' },
+    { value: 'hospitalized', label: 'Hospitalized' },
+    { value: 'ongoing-treatment', label: 'Ongoing medical treatment' },
+    { value: 'doctor-visit', label: 'Doctor visit only' },
+    { value: 'none-yet', label: 'No treatment yet' },
 ]
 
 const TIMELINE_OPTIONS = [
-    { value: 'asap', label: 'As soon as possible' },
-    { value: '1-month', label: 'Within 1 month' },
-    { value: '1-3-months', label: '1 – 3 months' },
-    { value: '3-6-months', label: '3 – 6 months' },
-    { value: 'flexible', label: 'Flexible' },
+    { value: 'today', label: 'Today' },
+    { value: 'this-week', label: 'This week' },
+    { value: 'this-month', label: 'This month' },
+    { value: '1-6-months', label: '1 – 6 months ago' },
+    { value: '6-12-months', label: '6 – 12 months ago' },
+    { value: 'over-a-year', label: 'Over a year ago' },
 ]
 
 const EMPTY: RawLeadFormData = {
@@ -120,32 +121,46 @@ export function LeadForm() {
                 >
                     {/* Row 1 — Name + Email */}
                     <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <FormField label="Full Name" name="name" value={form.name} onChange={set('name')} error={errors.name} required placeholder="Jane Smith" />
-                        <FormField label="Email Address" name="email" type="email" value={form.email} onChange={set('email')} error={errors.email} required placeholder="jane@company.com" />
+                        <FormField label="Full Name" name="name" value={form.name}
+                            onChange={set('name')} error={errors.name} required placeholder="Jane Smith" />
+                        <FormField label="Email Address" name="email" type="email" value={form.email}
+                            onChange={set('email')} error={errors.email} required placeholder="jane@email.com" />
                     </motion.div>
 
-                    {/* Row 2 — Company */}
-                    <motion.div variants={fadeUp}>
-                        <FormField label="Company / Organisation" name="company" value={form.company} onChange={set('company')} error={errors.company} required placeholder="Acme Inc." />
-                    </motion.div>
-
-                    {/* Row 3 — Budget + Timeline */}
-                    <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <FormField label="Budget Range" name="budget" type="select" options={BUDGET_OPTIONS} value={form.budget} onChange={set('budget')} error={errors.budget} required />
-                        <FormField label="Timeline" name="timeline" type="select" options={TIMELINE_OPTIONS} value={form.timeline} onChange={set('timeline')} error={errors.timeline} required />
-                    </motion.div>
-
-                    {/* Row 4 — Message */}
+                    {/* Row 2 — At-fault party */}
                     <motion.div variants={fadeUp}>
                         <FormField
-                            label="Project Brief"
+                            label="Who was at fault / What happened"
+                            name="company"
+                            value={form.company}
+                            onChange={set('company')}
+                            error={errors.company}
+                            required
+                            placeholder="e.g. Another driver ran a red light and hit my vehicle"
+                        />
+                    </motion.div>
+
+                    {/* Row 3 — Treatment + Incident date */}
+                    <motion.div variants={fadeUp} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <FormField label="Medical Treatment Received" name="budget" type="select"
+                            options={TREATMENT_OPTIONS} value={form.budget}
+                            onChange={set('budget')} error={errors.budget} required />
+                        <FormField label="When Did the Incident Occur" name="timeline" type="select"
+                            options={TIMELINE_OPTIONS} value={form.timeline}
+                            onChange={set('timeline')} error={errors.timeline} required />
+                    </motion.div>
+
+                    {/* Row 4 — Full incident description */}
+                    <motion.div variants={fadeUp}>
+                        <FormField
+                            label="Describe What Happened"
                             name="message"
                             type="textarea"
                             value={form.message}
                             onChange={set('message')}
                             error={errors.message}
                             required
-                            placeholder="Describe what you're building, what problem you're solving, and what success looks like."
+                            placeholder="Include details about the incident, your injuries, whether a police report was filed, and whether you have spoken to another attorney."
                         />
                     </motion.div>
 

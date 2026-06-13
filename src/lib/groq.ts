@@ -1,19 +1,15 @@
 import Groq from 'groq-sdk'
 
-// Single Groq client instance — reused across the app
 export const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 })
 
-// Model we're using — llama 3.3 70b supports parallel tool calling
 export const MODEL = 'llama-3.3-70b-versatile'
 
 // ─────────────────────────────────────────────
-// TOOL DEFINITIONS
-// This is what you send to the model so it knows
-// what tools exist, what they do, and what shape
-// of arguments to pass. The model reads these
-// descriptions the same way you read a menu.
+// BETTER CALL JON — PI INTAKE TOOL DEFINITIONS
+// Tools are scoped to personal injury intake.
+// No fees, no legal advice, intake only.
 // ─────────────────────────────────────────────
 
 export const tools: Groq.Chat.ChatCompletionTool[] = [
@@ -21,16 +17,20 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'classify_lead',
-      description: `Analyze a sales lead and classify their quality based on their message, 
-      budget, and timeline. Return a classification of hot, warm, cold, or unqualified 
-      with a confidence score and reasoning.`,
+      description: `Evaluate a personal injury intake submission for Better Call Jon law firm.
+      Classify case viability based on: nature and severity of injury, clarity of at-fault party,
+      whether medical treatment was received, recency of incident, and prior attorney contact.
+      A hot lead has clear liability, documented injury, recent incident, and no prior attorney.
+      A warm lead has some missing details but a viable core claim.
+      A cold lead has unclear liability, no injury documentation, or a very stale incident.
+      Unqualified means outside personal injury scope entirely.`,
       parameters: {
         type: 'object',
         properties: {
           classification: {
             type: 'string',
             enum: ['hot', 'warm', 'cold', 'unqualified'],
-            description: 'The lead quality classification',
+            description: 'Case viability classification',
           },
           confidence: {
             type: 'number',
@@ -38,7 +38,7 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
           },
           reasoning: {
             type: 'string',
-            description: 'One to two sentence explanation of the classification',
+            description: 'One to two sentence legal reasoning for the classification',
           },
         },
         required: ['classification', 'confidence', 'reasoning'],
@@ -49,19 +49,21 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'extract_intent',
-      description: `Extract the primary business intent and specific needs from a lead's 
-      message. What are they trying to accomplish and what do they need to get there.`,
+      description: `Extract the key facts from a personal injury intake submission.
+      Identify the nature of injury, incident date, at-fault party, medical treatment status,
+      police report status, and whether the claimant has spoken to another attorney.
+      Surface any red flags or strong case indicators.`,
       parameters: {
         type: 'object',
         properties: {
           intent: {
             type: 'string',
-            description: 'A single clear sentence describing what the lead wants to achieve',
+            description: 'One sentence summary of the claim — what happened and what they need',
           },
           needs: {
             type: 'array',
             items: { type: 'string' },
-            description: 'List of specific needs or requirements mentioned or implied',
+            description: 'Key case facts extracted: injury type, incident date, at-fault party, treatment, police report, prior attorney',
           },
         },
         required: ['intent', 'needs'],
@@ -72,23 +74,24 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'analyze_sentiment',
-      description: `Analyze the emotional tone and urgency of a lead's message. 
-      Detect whether they are positive, neutral, negative, or urgent in their communication.`,
+      description: `Analyze the emotional state and urgency of a personal injury claimant.
+      People in PI intake are often distressed, frustrated, or confused.
+      Detect their emotional tone and urgency so the attorney can calibrate their approach.`,
       parameters: {
         type: 'object',
         properties: {
           sentiment: {
             type: 'string',
             enum: ['positive', 'neutral', 'negative', 'urgent'],
-            description: 'The dominant emotional tone of the message',
+            description: 'Dominant emotional tone of the submission',
           },
           urgency_score: {
             type: 'number',
-            description: 'Urgency score from 1 (no rush) to 10 (needs this immediately)',
+            description: 'Urgency from 1 (no rush) to 10 (statute of limitations concern or acute distress)',
           },
           tone_notes: {
             type: 'string',
-            description: 'Brief notes on communication style and any red or green flags',
+            description: 'Notes on emotional state, stress indicators, or communication flags the attorney should know',
           },
         },
         required: ['sentiment', 'urgency_score', 'tone_notes'],
@@ -99,20 +102,25 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'draft_response_email',
-      description: `Draft a professional, personalized response email to a lead. 
-      Use their classification, intent, and sentiment to tailor the tone and content. 
-      Hot leads get direct and action-oriented emails. Warm leads get nurturing emails. 
-      Cold leads get value-focused emails.`,
+      description: `Draft a professional, empathetic response email from Better Call Jon law firm
+      to a personal injury claimant. The email must:
+      - Never discuss fees or payment arrangements
+      - Never give legal advice or case assessments
+      - Always clarify this is an intake acknowledgment only
+      - Be warm but professional — these are people in distress
+      - Include a clear next step (a call, a consultation request)
+      - Hot cases get priority language and urgency
+      - Cold or unqualified cases get a respectful, honest response`,
       parameters: {
         type: 'object',
         properties: {
           email_subject: {
             type: 'string',
-            description: 'A compelling, personalized email subject line',
+            description: 'Professional subject line appropriate for a law firm',
           },
           email_body: {
             type: 'string',
-            description: 'The full email body. Professional, concise, with a clear CTA.',
+            description: 'Full email body. Empathetic, professional, clear CTA. Short paragraphs. No legal advice. No fee discussion.',
           },
         },
         required: ['email_subject', 'email_body'],
@@ -121,8 +129,6 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
   },
 ]
 
-// The three tools that fire in parallel on submission
-// draft_response_email fires after, using their results
 export const analysisTools = tools.filter(t =>
   ['classify_lead', 'extract_intent', 'analyze_sentiment'].includes(
     t.function?.name ?? ''
