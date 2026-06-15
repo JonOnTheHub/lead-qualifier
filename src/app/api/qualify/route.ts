@@ -81,7 +81,10 @@ export async function POST(req: NextRequest) {
       a personal injury law firm. You evaluate PI claims and support the 
       intake process. You never give legal advice. You never discuss fees 
       or payment arrangements. You never make promises about case outcomes. 
-      You are intake only. ${languageInstruction}`
+      You are intake only.
+      You MUST call ALL THREE analysis tools simultaneously for every submission.
+      Never skip a tool regardless of the language of the submission.
+      ${languageInstruction}`
 
         const userPrompt = `
       Analyze this personal injury intake submission for Better Call Jon:
@@ -107,8 +110,8 @@ export async function POST(req: NextRequest) {
                     {
                         role: 'system',
                         content: `${firmContext}
-            You must call ALL THREE analysis tools simultaneously for every intake submission.
-            Be precise. Surface all legally relevant facts.`,
+            Be precise. Surface all legally relevant facts.
+  Regardless of the language of the submission, you must still call all three tools.`,
                     },
                     { role: 'user', content: userPrompt },
                 ],
@@ -136,22 +139,31 @@ export async function POST(req: NextRequest) {
             toolResults[call.function.name] = JSON.parse(call.function.arguments)
         }
 
-        const classify = toolResults['classify_lead'] as {
-            classification: string
-            confidence: number
-            reasoning: string
-        }
+        // ─────────────────────────────────────────────
+        // DEFENSIVE FALLBACKS
+        // If the model skips a tool (happens with non-English
+        // prompts where language instruction competes for
+        // attention), we fall back to safe defaults rather
+        // than crashing. The email draft still runs with
+        // whatever we have.
+        // ─────────────────────────────────────────────
 
-        const intent = toolResults['extract_intent'] as {
-            intent: string
-            needs: string[]
-        }
+        const classify = (toolResults['classify_lead'] ?? {
+            classification: 'warm',
+            confidence: 0.5,
+            reasoning: 'Classification unavailable — manual review required.',
+        }) as { classification: string; confidence: number; reasoning: string }
 
-        const sentiment = toolResults['analyze_sentiment'] as {
-            sentiment: string
-            urgency_score: number
-            tone_notes: string
-        }
+        const intent = (toolResults['extract_intent'] ?? {
+            intent: 'Unable to extract intent — manual review required.',
+            needs: [],
+        }) as { intent: string; needs: string[] }
+
+        const sentiment = (toolResults['analyze_sentiment'] ?? {
+            sentiment: 'neutral',
+            urgency_score: 5,
+            tone_notes: 'Sentiment analysis unavailable — manual review required.',
+        }) as { sentiment: string; urgency_score: number; tone_notes: string }
 
         // ─────────────────────────────────────────────
         // TURN 2 — EMAIL DRAFT
