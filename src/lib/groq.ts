@@ -4,7 +4,7 @@ export const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 })
 
-export const MODEL = 'llama-3.3-70b-versatile'
+export const MODEL = 'llama-3.3-70b-specdec'
 
 // ─────────────────────────────────────────────
 // BETTER CALL JON — PI INTAKE TOOL DEFINITIONS
