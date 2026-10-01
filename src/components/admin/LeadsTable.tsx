@@ -31,7 +31,7 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
             <table className="w-full">
                 <thead>
                     <tr className="border-b border-line">
-                        {['Name', 'Company', 'Classification', 'Sentiment', 'Urgency', 'Status', 'Submitted'].map(col => (
+                        {['Name', 'At Fault / Context', 'Classification', 'Sentiment', 'Urgency', 'Status', 'Submitted'].map(col => (
                             <th
                                 key={col}
                                 className="px-8 py-4 text-left font-data text-[8px] tracking-[0.2em] text-ghost uppercase font-normal"
@@ -53,7 +53,14 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
                                 <p className="font-sans text-xs text-ghost mt-0.5">{lead.email}</p>
                             </td>
                             <td className="px-8 py-5 font-sans text-sm text-ghost">
-                                {lead.company || '—'}
+                                {/* The field can hold a whole paragraph, so cap the width
+                                    and truncate. Full text is on hover and in the drawer. */}
+                                <span
+                                    className="block max-w-[260px] truncate"
+                                    title={lead.company}
+                                >
+                                    {lead.company || '—'}
+                                </span>
                             </td>
                             <td className="px-8 py-5">
                                 <Badge value={lead.classification} />

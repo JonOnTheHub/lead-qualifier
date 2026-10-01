@@ -133,7 +133,8 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', stiffness: 120, damping: 22 }}
                     >
-                        {/* Header */}
+                        {/* Header — email only. The at-fault/context field can be
+                            a full paragraph, so it lives in the Incident section. */}
                         <div className="sticky top-0 bg-surface border-b border-line px-8 py-6 flex items-start justify-between z-10">
                             <div>
                                 <p className="font-data text-[8px] tracking-[0.2em] text-accent uppercase mb-2">
@@ -143,7 +144,7 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                     {lead.name}
                                 </h2>
                                 <p className="font-sans text-xs text-ghost mt-0.5">
-                                    {lead.company} · {lead.email}
+                                    {lead.email}
                                 </p>
                             </div>
                             <div className="flex flex-col items-end gap-3">
@@ -214,6 +215,18 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                 </div>
                             </div>
 
+                            {/* Incident — the raw form answers, labeled for what they
+                                actually are in the PI intake. DB columns are still
+                                company/timeline/budget from the original form. */}
+                            <div>
+                                <p className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase mb-4">
+                                    Incident
+                                </p>
+                                <Row label="At-Fault Party / Context" value={lead.company || '—'} />
+                                <Row label="Incident Date" value={lead.timeline || '—'} />
+                                <Row label="Medical Treatment" value={lead.budget || '—'} />
+                            </div>
+
                             {/* Email Draft — editable while reviewable, read-only after */}
                             <div>
                                 <p className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase mb-4">
@@ -254,8 +267,6 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                         })}
                                     />
                                 )}
-                                <Row label="Budget" value={lead.budget} />
-                                <Row label="Timeline" value={lead.timeline} />
                                 {lead.send_error && (
                                     <Row label="Last Send Error" value={lead.send_error} />
                                 )}

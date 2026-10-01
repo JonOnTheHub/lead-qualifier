@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { groq, MODEL, analysisTools, emailTool } from "@/lib/groq";
+import { groq, MODEL, reasoningParams, analysisTools, emailTool } from "@/lib/groq";
 import { createAdminClient } from "@/lib/supabase/server";
 import { notifySlack } from "@/lib/slack";
 import { RawLeadFormData, AIToolResults } from "@/types/lead";
@@ -31,10 +31,98 @@ async function detectLanguage(text: string): Promise<string> {
                 content: text,
             },
         ],
-        max_tokens: 10,
+        // Reasoning models spend completion tokens on thinking before the
+        // answer, so leave real headroom for a one-word reply.
+        max_tokens: 200,
+        ...reasoningParams,
     });
 
-    return res.choices[0].message.content?.trim() ?? "English";
+    // First word, letters only. An empty result falls back to English
+    // instead of producing "the claimant wrote in ." in the prompt.
+    const raw = res.choices[0].message.content ?? "";
+    const language = raw.trim().split(/\s+/)[0]?.replace(/[^\p{L}]/gu, "");
+    return language || "English";
+}
+
+// ─────────────────────────────────────────────
+// SINGLE FORCED TOOL CALL
+// gpt-oss does not reliably emit several tool calls from one
+// request, even when told to. So each analysis tool gets its own
+// request where it is the ONLY tool available and tool_choice is
+// "required". The model cannot skip it. The three requests run
+// concurrently, so wall-clock time is still one round trip.
+//
+// Returns args: null if the model produced nothing usable. The
+// caller falls back to safe defaults and logs it.
+// ─────────────────────────────────────────────
+
+async function runTool(name: string, system: string, user: string) {
+    const tool = analysisTools.filter((t) => t.function?.name === name);
+
+    const res = await withRetry(
+        () =>
+            groq.chat.completions.create({
+                model: MODEL,
+                messages: [
+                    { role: "system", content: system },
+                    { role: "user", content: user },
+                ],
+                tools: tool,
+                tool_choice: "required",
+                ...reasoningParams,
+            }),
+        {
+            maxAttempts: 3,
+            baseDelayMs: 500,
+            onRetry: (attempt, err) =>
+                console.warn(`[qualify] ${name} retry ${attempt}:`, err),
+        },
+    );
+
+    const call = res.choices[0].message.tool_calls?.find(
+        (c) => c.function.name === name,
+    );
+
+    let args: Record<string, unknown> | null = null;
+    if (call) {
+        try {
+            args = JSON.parse(call.function.arguments);
+        } catch {
+            console.warn(`[qualify] ${name} returned unparseable arguments`);
+        }
+    }
+    if (!args) console.warn(`[qualify] ${name} produced no usable output, using fallback`);
+
+    return { args, usage: res.usage };
+}
+
+// ─────────────────────────────────────────────
+// VALIDATION HELPERS
+// The DB has CHECK constraints on classification and sentiment,
+// and integer/numeric columns. A model returning "High" or 7.5
+// would 500 the insert, so everything is normalized here.
+// ─────────────────────────────────────────────
+
+const CLASSIFICATIONS = ["hot", "warm", "cold", "unqualified"] as const;
+const SENTIMENTS = ["positive", "neutral", "negative", "urgent"] as const;
+
+function pick<T extends readonly string[]>(
+    value: unknown,
+    allowed: T,
+    fallback: T[number],
+): T[number] {
+    const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return (allowed as readonly string[]).includes(v) ? v : fallback;
+}
+
+function num(value: unknown, min: number, max: number, fallback: number): number {
+    return typeof value === "number" && Number.isFinite(value)
+        ? Math.min(max, Math.max(min, value))
+        : fallback;
+}
+
+function str(value: unknown, fallback: string): string {
+    return typeof value === "string" && value.trim() ? value : fallback;
 }
 
 export async function POST(req: NextRequest) {
@@ -72,9 +160,6 @@ export async function POST(req: NextRequest) {
 
         // ─────────────────────────────────────────────
         // DETECT LANGUAGE FIRST
-        // Cheap single call before the main pipeline.
-        // Result gets injected into every system prompt
-        // so the model responds in the claimant's language.
         // ─────────────────────────────────────────────
 
         const detectedLanguage = await detectLanguage(message);
@@ -87,13 +172,21 @@ export async function POST(req: NextRequest) {
          the email body and subject — must be written in ${detectedLanguage}. 
          Do not respond in English unless the submission was in English.`;
 
+        // Base context shared by every Turn 1 call. The per-tool
+        // instruction and the English-output rule are appended after it,
+        // and the language instruction comes last. Tool-calling
+        // instruction stays ahead of language instruction on purpose.
         const firmContext = `You are an intake assistant for Better Call Jon, 
       a personal injury law firm. You evaluate PI claims and support the 
       intake process. You never give legal advice. You never discuss fees 
       or payment arrangements. You never make promises about case outcomes. 
       You are intake only.
-      You MUST call ALL THREE analysis tools simultaneously for every submission.
-      Never skip a tool regardless of the language of the submission.
+      Be precise. Surface all legally relevant facts.`;
+
+        const turn1System = (toolName: string) => `${firmContext}
+      You MUST call the ${toolName} tool. Do not answer in plain text.
+      Regardless of the language of the submission, you must still call the tool.
+      IMPORTANT: All tool output — reasoning, intent, needs, tone_notes — must be written in English.
       ${languageInstruction}`;
 
         const userPrompt = `
@@ -108,87 +201,70 @@ export async function POST(req: NextRequest) {
     `;
 
         // ─────────────────────────────────────────────
-        // TURN 1 — PARALLEL TOOL CALLS
+        // TURN 1 — THREE FORCED TOOL CALLS, CONCURRENT
         // ─────────────────────────────────────────────
 
         const turn1Start = Date.now();
 
-        const turn1Response = await withRetry(
-            () =>
-                groq.chat.completions.create({
-                    model: MODEL,
-                    messages: [
-                        {
-                            role: "system",
-                            content: `${firmContext}
-                        Be precise. Surface all legally relevant facts.
-                        Regardless of the language of the submission, you must still call all three tools.
-                        IMPORTANT: All tool output — reasoning, intent, needs, tone_notes — must be written in English.
-                        Only the email draft should be in the claimant's language.`,
-                        },
-                        { role: "user", content: userPrompt },
-                    ],
-                    tools: analysisTools,
-                    tool_choice: "required",
-                }),
-            {
-                maxAttempts: 3,
-                baseDelayMs: 500,
-                onRetry: (attempt, err) =>
-                    console.warn(`[qualify] turn1 retry ${attempt}:`, err),
-            },
-        );
+        const [classifyRun, intentRun, sentimentRun] = await Promise.all([
+            runTool("classify_lead", turn1System("classify_lead"), userPrompt),
+            runTool("extract_intent", turn1System("extract_intent"), userPrompt),
+            runTool("analyze_sentiment", turn1System("analyze_sentiment"), userPrompt),
+        ]);
 
         const turn1Latency = Date.now() - turn1Start;
-        const turn1Message = turn1Response.choices[0].message;
-        const toolCalls = turn1Message.tool_calls;
 
-        if (!toolCalls || toolCalls.length === 0) {
-            throw new Error("Model did not call any tools");
-        }
-
-        const toolResults: Record<string, unknown> = {};
-        for (const call of toolCalls) {
-            toolResults[call.function.name] = JSON.parse(call.function.arguments);
-        }
+        // Sum usage across the three requests so usage_logs still has
+        // one row per turn. Latency is wall time, not the sum.
+        const turn1Usage = [classifyRun, intentRun, sentimentRun].reduce(
+            (acc, run) => ({
+                prompt_tokens: acc.prompt_tokens + (run.usage?.prompt_tokens ?? 0),
+                completion_tokens:
+                    acc.completion_tokens + (run.usage?.completion_tokens ?? 0),
+                total_tokens: acc.total_tokens + (run.usage?.total_tokens ?? 0),
+            }),
+            { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        );
 
         // ─────────────────────────────────────────────
-        // DEFENSIVE FALLBACKS
-        // If the model skips a tool (happens with non-English
-        // prompts where language instruction competes for
-        // attention), we fall back to safe defaults rather
-        // than crashing. The email draft still runs with
-        // whatever we have.
+        // VALIDATE + DEFENSIVE FALLBACKS
+        // If a tool still yields nothing usable we fall back to safe
+        // defaults rather than crashing. Values are clamped to what the
+        // DB accepts either way.
         // ─────────────────────────────────────────────
 
-        const classify = (toolResults["classify_lead"] ?? {
-            classification: "warm",
-            confidence: 0.5,
-            reasoning: "Classification unavailable — manual review required.",
-        }) as { classification: string; confidence: number; reasoning: string };
-
-        const intentRaw = (toolResults["extract_intent"] ?? {
-            intent: "Unable to extract intent — manual review required.",
-            needs: [],
-        }) as { intent: string; needs?: string[] };
-
-        // The model can return the tool but drop the needs array.
-        // Normalize once here so nothing downstream has to care.
-        const intent = {
-            intent: intentRaw.intent,
-            needs: Array.isArray(intentRaw.needs) ? intentRaw.needs : [],
+        const classify = {
+            classification: pick(classifyRun.args?.classification, CLASSIFICATIONS, "warm"),
+            confidence: num(classifyRun.args?.confidence, 0, 1, 0.5),
+            reasoning: str(
+                classifyRun.args?.reasoning,
+                "Classification unavailable — manual review required.",
+            ),
         };
 
-        const sentiment = (toolResults["analyze_sentiment"] ?? {
-            sentiment: "neutral",
-            urgency_score: 5,
-            tone_notes: "Sentiment analysis unavailable — manual review required.",
-        }) as { sentiment: string; urgency_score: number; tone_notes: string };
+        const intent = {
+            intent: str(
+                intentRun.args?.intent,
+                "Unable to extract intent — manual review required.",
+            ),
+            needs: Array.isArray(intentRun.args?.needs)
+                ? (intentRun.args.needs as unknown[]).map(String)
+                : [],
+        };
+
+        const sentiment = {
+            sentiment: pick(sentimentRun.args?.sentiment, SENTIMENTS, "neutral"),
+            urgency_score: Math.round(num(sentimentRun.args?.urgency_score, 1, 10, 5)),
+            tone_notes: str(
+                sentimentRun.args?.tone_notes,
+                "Sentiment analysis unavailable — manual review required.",
+            ),
+        };
 
         // ─────────────────────────────────────────────
         // TURN 2 — EMAIL DRAFT
-        // Plain text summary passed as context.
-        // Language instruction carried through so the
+        // Plain text summary passed as context (never raw tool_result
+        // messages). Language instruction carried through so the
         // email arrives in the claimant's language.
         // ─────────────────────────────────────────────
 
@@ -222,6 +298,10 @@ export async function POST(req: NextRequest) {
                             content: `You are a professional legal intake coordinator at Better Call Jon, 
             a personal injury law firm. Draft empathetic, professional response emails.
             Never give legal advice. Never discuss fees. Never promise outcomes.
+            Never invent phone numbers, email addresses, links, URLs, office addresses, 
+            or scheduling tools. You have none. The only next step you may offer is 
+            that the claimant replies to this email and the team will follow up.
+            Do not describe any consultation as free.
             Always sign as "The Intake Team at Better Call Jon".
             Short paragraphs. Human tone. Clear next step.
             ${languageInstruction}
@@ -231,6 +311,7 @@ export async function POST(req: NextRequest) {
                     ],
                     tools: emailTool,
                     tool_choice: "required",
+                    ...reasoningParams,
                 }),
             {
                 maxAttempts: 3,
@@ -251,13 +332,12 @@ export async function POST(req: NextRequest) {
         };
 
         const aiResults: AIToolResults = {
-            classification:
-                classify.classification as AIToolResults["classification"],
+            classification: classify.classification,
             confidence: classify.confidence,
             reasoning: classify.reasoning,
             intent: intent.intent,
             needs: intent.needs,
-            sentiment: sentiment.sentiment as AIToolResults["sentiment"],
+            sentiment: sentiment.sentiment,
             urgency_score: sentiment.urgency_score,
             tone_notes: sentiment.tone_notes,
             email_subject: emailDraft.email_subject,
@@ -266,11 +346,8 @@ export async function POST(req: NextRequest) {
 
         // ─────────────────────────────────────────────
         // STORE THE LEAD AS PENDING REVIEW
-        // The draft is saved but NOT sent. status defaults
-        // to 'pending_review' in the DB, set explicitly
-        // here so the intent is readable in code.
-        // A human approves from the admin drawer, and the
-        // approve action is what actually sends the email.
+        // The draft is saved but NOT sent. A human approves from the
+        // admin drawer, and the approve action is what sends the email.
         // ─────────────────────────────────────────────
 
         const supabase = createAdminClient();
@@ -294,8 +371,8 @@ export async function POST(req: NextRequest) {
 
         if (dbError) throw new Error(`Supabase insert failed: ${dbError.message}`);
 
-        // Slack is a heads-up only now. If it fails, the lead is
-        // still safely in the queue, so we swallow the error.
+        // Slack is a heads-up only. If it fails, the lead is still
+        // safely in the queue, so we swallow the error.
         let slackNotified = false;
         try {
             await notifySlack({
@@ -322,9 +399,7 @@ export async function POST(req: NextRequest) {
             {
                 lead_id: lead.id,
                 model: MODEL,
-                prompt_tokens: turn1Response.usage?.prompt_tokens ?? 0,
-                completion_tokens: turn1Response.usage?.completion_tokens ?? 0,
-                total_tokens: turn1Response.usage?.total_tokens ?? 0,
+                ...turn1Usage,
                 turn: 1,
                 latency_ms: turn1Latency,
             },

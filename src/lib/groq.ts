@@ -4,7 +4,17 @@ export const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 })
 
-export const MODEL = 'llama-3.3-70b-specdec'
+// Model comes from env so the next Groq deprecation is a config change,
+// not a deploy of code. llama-3.3-70b-specdec (gone 04/2025) and
+// llama-3.3-70b-versatile (gone 08/2026) are both decommissioned.
+export const MODEL = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b'
+
+// gpt-oss is a reasoning model. Low effort keeps latency and free-tier
+// token burn down for these structured tasks. Spread this into every
+// completion call. Other models get no param.
+export const reasoningParams = MODEL.startsWith('openai/gpt-oss')
+  ? { reasoning_effort: 'low' as const }
+  : {}
 
 // ─────────────────────────────────────────────
 // BETTER CALL JON — PI INTAKE TOOL DEFINITIONS
