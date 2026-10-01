@@ -10,7 +10,11 @@ interface LeadsTableProps {
 }
 
 export default function LeadsTable({ leads }: LeadsTableProps) {
-    const [active, setActive] = useState<Lead | null>(null)
+    // Store the id, not the lead. After approve/reject the server
+    // re-sends fresh leads, and deriving the active lead from them
+    // keeps the open drawer in sync instead of showing a stale copy.
+    const [activeId, setActiveId] = useState<string | null>(null)
+    const active = leads.find(l => l.id === activeId) ?? null
 
     if (leads.length === 0) {
         return (
@@ -27,7 +31,7 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
             <table className="w-full">
                 <thead>
                     <tr className="border-b border-line">
-                        {['Name', 'Company', 'Classification', 'Sentiment', 'Urgency', 'Submitted'].map(col => (
+                        {['Name', 'Company', 'Classification', 'Sentiment', 'Urgency', 'Status', 'Submitted'].map(col => (
                             <th
                                 key={col}
                                 className="px-8 py-4 text-left font-data text-[8px] tracking-[0.2em] text-ghost uppercase font-normal"
@@ -41,7 +45,7 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
                     {leads.map(lead => (
                         <tr
                             key={lead.id}
-                            onClick={() => setActive(lead)}
+                            onClick={() => setActiveId(lead.id)}
                             className="border-b border-line cursor-pointer hover:bg-surface transition-colors group"
                         >
                             <td className="px-8 py-5">
@@ -60,6 +64,9 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
                             <td className="px-8 py-5 font-data text-sm text-ink">
                                 {lead.urgency_score}/10
                             </td>
+                            <td className="px-8 py-5">
+                                <Badge value={lead.status} />
+                            </td>
                             <td className="px-8 py-5 font-data text-[10px] text-ghost tracking-wider">
                                 {new Date(lead.created_at).toLocaleDateString('en-GB', {
                                     day: 'numeric', month: 'short', year: 'numeric',
@@ -70,7 +77,7 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
                 </tbody>
             </table>
 
-            <LeadDrawer lead={active} onClose={() => setActive(null)} />
+            <LeadDrawer lead={active} onClose={() => setActiveId(null)} />
         </>
     )
 }

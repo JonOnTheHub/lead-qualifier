@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface TypewriterProps {
     lines: string[]
@@ -12,12 +12,25 @@ interface TypewriterProps {
 export function Typewriter({ lines, speed = 28, onComplete, className }: TypewriterProps) {
     const fullText = lines.join('\n')
     const [displayed, setDisplayed] = useState('')
-    const [done, setDone] = useState(false)
+
+    // Derived, not stored. "Done" is always just "displayed caught up to
+    // fullText", so keeping it in its own state meant syncing it with an
+    // effect, which is exactly what the lint rule flags.
+    const done = displayed.length >= fullText.length
+
+    // Keep the latest onComplete in a ref so the typing effect doesn't
+    // re-run (and re-fire the callback) when the parent passes a new
+    // function identity on re-render.
+    const onCompleteRef = useRef(onComplete)
+    useEffect(() => {
+        onCompleteRef.current = onComplete
+    }, [onComplete])
 
     useEffect(() => {
-        if (displayed.length >= fullText.length) {
-            setDone(true)
-            onComplete?.()
+        if (done) {
+            // Calling an external callback is a legit effect job.
+            // Only the direct setState was the problem.
+            onCompleteRef.current?.()
             return
         }
 
@@ -26,7 +39,7 @@ export function Typewriter({ lines, speed = 28, onComplete, className }: Typewri
         }, speed)
 
         return () => clearTimeout(timeout)
-    }, [displayed, fullText, speed, onComplete])
+    }, [done, displayed, fullText, speed])
 
     // Split back into lines for rendering with <br />
     const parts = displayed.split('\n')

@@ -1,8 +1,10 @@
 'use client'
 
+import { useState, useTransition } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Lead } from '@/types/lead'
 import Badge from '@/components/ui/Badge'
+import { approveLead, rejectLead } from '@/app/admin/actions'
 
 interface LeadDrawerProps {
     lead: Lead | null
@@ -22,7 +24,94 @@ function Row({ label, value }: { label: string; value: string | number }) {
     )
 }
 
+// ─────────────────────────────────────────────
+// REVIEW PANEL
+// Editable draft + approve/reject. Mounted with key={lead.id}
+// so its local state (the edited subject/body) initializes
+// fresh for each lead instead of leaking between them.
+// ─────────────────────────────────────────────
+
+function ReviewPanel({ lead }: { lead: Lead }) {
+    const [subject, setSubject] = useState(lead.email_subject)
+    const [body, setBody] = useState(lead.email_body)
+    const [error, setError] = useState<string | null>(null)
+
+    // useTransition gives us a pending flag while the server action runs,
+    // so we can disable the buttons and block double submits client-side.
+    // (The DB claim in approveLead is the real guard. This is just UX.)
+    const [pending, startTransition] = useTransition()
+
+    function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+        setError(null)
+        startTransition(async () => {
+            const res = await action()
+            if (!res.ok) setError(res.error ?? 'Something went wrong')
+            // On success the server revalidates /admin, the lead's status
+            // changes, and this panel unmounts on its own.
+        })
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="space-y-2">
+                <label className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase block">
+                    Subject
+                </label>
+                <input
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    disabled={pending}
+                    className="w-full bg-background border border-line px-4 py-3 font-sans text-sm text-ink focus:outline-none focus:border-accent disabled:opacity-50"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <label className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase block">
+                    Body
+                </label>
+                <textarea
+                    value={body}
+                    onChange={e => setBody(e.target.value)}
+                    disabled={pending}
+                    rows={14}
+                    className="w-full bg-background border border-line p-4 font-sans text-sm text-ink leading-relaxed focus:outline-none focus:border-accent disabled:opacity-50"
+                />
+            </div>
+
+            {error && (
+                <p className="font-data text-[9px] tracking-wider text-[#ff6b6b]">
+                    {error}
+                </p>
+            )}
+
+            <div className="flex gap-3 pt-2">
+                <button
+                    onClick={() => run(() => approveLead(lead.id, subject, body))}
+                    disabled={pending}
+                    className="flex-1 bg-accent text-background font-data text-[9px] tracking-[0.2em] uppercase px-6 py-3.5 hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                    {pending ? 'Working…' : lead.status === 'send_failed' ? 'Retry Send' : 'Approve & Send'}
+                </button>
+                <button
+                    onClick={() => {
+                        if (window.confirm('Reject this lead? No email will be sent.')) {
+                            run(() => rejectLead(lead.id))
+                        }
+                    }}
+                    disabled={pending}
+                    className="border border-line text-ghost hover:text-ink font-data text-[9px] tracking-[0.2em] uppercase px-6 py-3.5 transition-colors disabled:opacity-50"
+                >
+                    Reject
+                </button>
+            </div>
+        </div>
+    )
+}
+
 export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
+    const reviewable =
+        lead?.status === 'pending_review' || lead?.status === 'send_failed'
+
     return (
         <AnimatePresence>
             {lead && (
@@ -57,12 +146,15 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                     {lead.company} · {lead.email}
                                 </p>
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="font-data text-[9px] tracking-widest text-ghost hover:text-ink transition-colors uppercase mt-1"
-                            >
-                                Close
-                            </button>
+                            <div className="flex flex-col items-end gap-3">
+                                <button
+                                    onClick={onClose}
+                                    className="font-data text-[9px] tracking-widest text-ghost hover:text-ink transition-colors uppercase mt-1"
+                                >
+                                    Close
+                                </button>
+                                <Badge value={lead.status} />
+                            </div>
                         </div>
 
                         {/* Body */}
@@ -122,21 +214,26 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                 </div>
                             </div>
 
-                            {/* Email Draft */}
+                            {/* Email Draft — editable while reviewable, read-only after */}
                             <div>
                                 <p className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase mb-4">
-                                    Drafted Response
+                                    {reviewable ? 'Review Draft' : 'Drafted Response'}
                                 </p>
-                                <div className="bg-background border border-line p-6 space-y-4">
-                                    <p className="font-data text-[9px] tracking-wider text-ghost">
-                                        Subject: <span className="text-ink">{lead.email_subject}</span>
-                                    </p>
-                                    <div className="border-t border-line pt-4">
-                                        <p className="font-sans text-sm text-ink/80 leading-relaxed whitespace-pre-line">
-                                            {lead.email_body}
+
+                                {reviewable ? (
+                                    <ReviewPanel key={lead.id} lead={lead} />
+                                ) : (
+                                    <div className="bg-background border border-line p-6 space-y-4">
+                                        <p className="font-data text-[9px] tracking-wider text-ghost">
+                                            Subject: <span className="text-ink">{lead.email_subject}</span>
                                         </p>
+                                        <div className="border-t border-line pt-4">
+                                            <p className="font-sans text-sm text-ink/80 leading-relaxed whitespace-pre-line">
+                                                {lead.email_body}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* Meta */}
@@ -148,11 +245,23 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                         hour: '2-digit', minute: '2-digit',
                                     })}
                                 />
+                                {lead.reviewed_at && (
+                                    <Row
+                                        label="Reviewed"
+                                        value={new Date(lead.reviewed_at).toLocaleString('en-GB', {
+                                            day: 'numeric', month: 'long', year: 'numeric',
+                                            hour: '2-digit', minute: '2-digit',
+                                        })}
+                                    />
+                                )}
                                 <Row label="Budget" value={lead.budget} />
                                 <Row label="Timeline" value={lead.timeline} />
+                                {lead.send_error && (
+                                    <Row label="Last Send Error" value={lead.send_error} />
+                                )}
                                 <div className="flex gap-4 pt-4">
                                     <span className={`font-data text-[8px] tracking-widest ${lead.email_sent ? 'text-[#6bc98a]' : 'text-ghost'}`}>
-                                        {lead.email_sent ? '✓ Email Sent' : '✗ Email Failed'}
+                                        {lead.email_sent ? '✓ Email Sent' : '— Email Not Sent'}
                                     </span>
                                     <span className={`font-data text-[8px] tracking-widest ${lead.slack_notified ? 'text-[#6bc98a]' : 'text-ghost'}`}>
                                         {lead.slack_notified ? '✓ Slack Notified' : '✗ Slack Failed'}
