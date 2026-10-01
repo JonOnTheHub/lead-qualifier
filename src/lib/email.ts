@@ -15,6 +15,20 @@ interface SendEmailParams {
   firmName?: string
 }
 
+// The draft comes from a model that read claimant-written text, and the
+// reviewer can edit it too. Anything dropped into the HTML part has to be
+// escaped, otherwise a submission containing markup becomes live markup
+// (links, images, fake buttons) inside an email that went out under the
+// firm's name. The plain-text part below stays raw, which is correct.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export async function sendEmail({
   to, subject, body, firmName = 'Better Call Jon'
 }: SendEmailParams) {
@@ -22,11 +36,15 @@ export async function sendEmail({
     .split('\n')
     .map(line => line.trim())
     .filter(line => line.length > 0)
-    .map(line => `<p style="margin:0 0 18px;line-height:1.7;">${line}</p>`)
+    .map(line => `<p style="margin:0 0 18px;line-height:1.7;">${escapeHtml(line)}</p>`)
     .join('')
 
+  // Display name in the From header: no quotes or line breaks, so a
+  // firm name can't break out of the header or inject new ones.
+  const safeFromName = firmName.replace(/["\r\n]/g, '').trim()
+
   await transporter.sendMail({
-    from: `"${firmName}" <${process.env.GMAIL_USER}>`,
+    from: `"${safeFromName}" <${process.env.GMAIL_USER}>`,
     to,
     subject,
     text: body,
@@ -49,7 +67,7 @@ export async function sendEmail({
                     <td style="background:#0B1120;padding:28px 40px;">
                       <p style="margin:0;font-family:Georgia,serif;font-size:15px;
                         color:#E8D9B0;letter-spacing:0.05em;">
-                        ${firmName}
+                        ${escapeHtml(firmName)}
                       </p>
                     </td>
                   </tr>
