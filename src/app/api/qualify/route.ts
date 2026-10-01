@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { groq, MODEL, analysisTools, emailTool } from "@/lib/groq";
 import { createAdminClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/email";
 import { notifySlack } from "@/lib/slack";
 import { RawLeadFormData, AIToolResults } from "@/types/lead";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { withRetry } from "@/lib/retry";
-import Groq from "groq-sdk";
 
 // ─────────────────────────────────────────────
 // LANGUAGE DETECTION
@@ -52,7 +50,18 @@ export async function POST(req: NextRequest) {
 
     try {
         const body: RawLeadFormData = await req.json();
-        const { name, email, company, budget, timeline, message } = body;
+
+        // company/budget/timeline default to "" so a missing field can't
+        // crash the pipeline further down (the DB columns are NOT NULL,
+        // and an empty string satisfies that).
+        const {
+            name,
+            email,
+            company = "",
+            budget = "",
+            timeline = "",
+            message,
+        } = body;
 
         if (!name || !email || !message) {
             return NextResponse.json(
@@ -158,10 +167,17 @@ export async function POST(req: NextRequest) {
             reasoning: "Classification unavailable — manual review required.",
         }) as { classification: string; confidence: number; reasoning: string };
 
-        const intent = (toolResults["extract_intent"] ?? {
+        const intentRaw = (toolResults["extract_intent"] ?? {
             intent: "Unable to extract intent — manual review required.",
             needs: [],
-        }) as { intent: string; needs: string[] };
+        }) as { intent: string; needs?: string[] };
+
+        // The model can return the tool but drop the needs array.
+        // Normalize once here so nothing downstream has to care.
+        const intent = {
+            intent: intentRaw.intent,
+            needs: Array.isArray(intentRaw.needs) ? intentRaw.needs : [],
+        };
 
         const sentiment = (toolResults["analyze_sentiment"] ?? {
             sentiment: "neutral",
@@ -248,6 +264,15 @@ export async function POST(req: NextRequest) {
             email_body: emailDraft.email_body,
         };
 
+        // ─────────────────────────────────────────────
+        // STORE THE LEAD AS PENDING REVIEW
+        // The draft is saved but NOT sent. status defaults
+        // to 'pending_review' in the DB, set explicitly
+        // here so the intent is readable in code.
+        // A human approves from the admin drawer, and the
+        // approve action is what actually sends the email.
+        // ─────────────────────────────────────────────
+
         const supabase = createAdminClient();
 
         const { data: lead, error: dbError } = await supabase
@@ -262,36 +287,36 @@ export async function POST(req: NextRequest) {
                 ...aiResults,
                 email_sent: false,
                 slack_notified: false,
+                status: "pending_review",
             })
             .select()
             .single();
 
         if (dbError) throw new Error(`Supabase insert failed: ${dbError.message}`);
 
-        const [emailSent, slackSent] = await Promise.allSettled([
-            sendEmail({
-                to: email,
-                subject: emailDraft.email_subject,
-                body: emailDraft.email_body,
-                firmName: "Better Call Jon",
-            }),
-            notifySlack({
+        // Slack is a heads-up only now. If it fails, the lead is
+        // still safely in the queue, so we swallow the error.
+        let slackNotified = false;
+        try {
+            await notifySlack({
                 name,
                 company: company.length > 40 ? `${company.slice(0, 40)}...` : company,
                 classification: aiResults.classification,
                 urgency_score: aiResults.urgency_score,
                 intent: aiResults.intent,
                 lead_id: lead.id,
-            }),
-        ]);
+            });
+            slackNotified = true;
+        } catch (err) {
+            console.warn("[qualify] slack failed:", err);
+        }
 
-        await supabase
-            .from("leads")
-            .update({
-                email_sent: emailSent.status === "fulfilled",
-                slack_notified: slackSent.status === "fulfilled",
-            })
-            .eq("id", lead.id);
+        if (slackNotified) {
+            await supabase
+                .from("leads")
+                .update({ slack_notified: true })
+                .eq("id", lead.id);
+        }
 
         await supabase.from("usage_logs").insert([
             {

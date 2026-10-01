@@ -67,7 +67,8 @@ export async function notifySlack(payload: SlackLeadPayload) {
             elements: [
               {
                 type: 'mrkdwn',
-                text: `Processed by AI Lead Qualifier · Response email sent`,
+                // Nothing has been sent yet. A human approves the draft first.
+                text: `Processed by AI Lead Qualifier · Draft awaiting review`,
               },
             ],
           },

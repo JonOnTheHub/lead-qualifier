@@ -2,6 +2,15 @@ export type LeadClassification = 'hot' | 'warm' | 'cold' | 'unqualified'
 
 export type LeadSentiment = 'positive' | 'neutral' | 'negative' | 'urgent'
 
+// Review state machine. 'sending' is a claim state: whoever flips
+// pending_review -> sending owns the send, so double clicks can't double send.
+export type LeadStatus =
+    | 'pending_review'
+    | 'sending'
+    | 'sent'
+    | 'rejected'
+    | 'send_failed'
+
 export interface RawLeadFormData {
     name: string
     email: string
@@ -29,6 +38,9 @@ export interface Lead extends RawLeadFormData, AIToolResults {
     created_at: string
     email_sent: boolean
     slack_notified: boolean
+    status: LeadStatus
+    reviewed_at: string | null
+    send_error: string | null
 }
 
 export interface QualifyApiResponse {
