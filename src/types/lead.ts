@@ -41,6 +41,10 @@ export interface Lead extends RawLeadFormData, AIToolResults {
     status: LeadStatus
     reviewed_at: string | null
     send_error: string | null
+    // Null only for rows written before the pipeline started setting it
+    // (the migration backfills those). `fields` is the raw submission as posted.
+    tenant_id: string | null
+    fields: Record<string, unknown>
 }
 
 export interface QualifyApiResponse {

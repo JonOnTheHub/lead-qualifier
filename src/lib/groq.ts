@@ -5,7 +5,7 @@ export const groq = new Groq({
 })
 
 // Model comes from env so the next Groq deprecation is a config change,
-// not a deploy of code. llama-3.3-70b-specdec (gone 04/2025) and
+// not a code change. llama-3.3-70b-specdec (gone 04/2025) and
 // llama-3.3-70b-versatile (gone 08/2026) are both decommissioned.
 export const MODEL = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b'
 
@@ -17,9 +17,12 @@ export const reasoningParams = MODEL.startsWith('openai/gpt-oss')
   : {}
 
 // ─────────────────────────────────────────────
-// BETTER CALL JON — PI INTAKE TOOL DEFINITIONS
-// Tools are scoped to personal injury intake.
-// No fees, no legal advice, intake only.
+// GENERIC TOOL DEFINITIONS
+// The schemas are the same for every tenant. Anything domain-specific
+// (what hot means, which facts to extract, what urgency means, how the
+// email should read) comes from the tenant row and is injected into the
+// system prompt by lib/pipeline.ts. Keep these descriptions
+// business-neutral or they leak one tenant's domain into another's.
 // ─────────────────────────────────────────────
 
 export const tools: Groq.Chat.ChatCompletionTool[] = [
@@ -27,20 +30,15 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'classify_lead',
-      description: `Evaluate a personal injury intake submission for Better Call Jon law firm.
-      Classify case viability based on: nature and severity of injury, clarity of at-fault party,
-      whether medical treatment was received, recency of incident, and prior attorney contact.
-      A hot lead has clear liability, documented injury, recent incident, and no prior attorney.
-      A warm lead has some missing details but a viable core claim.
-      A cold lead has unclear liability, no injury documentation, or a very stale incident.
-      Unqualified means outside personal injury scope entirely.`,
+      description: `Classify an inbound lead using the classification rubric in the system prompt.
+      Hot, warm, cold and unqualified are defined by that rubric, not by general sales conventions.`,
       parameters: {
         type: 'object',
         properties: {
           classification: {
             type: 'string',
             enum: ['hot', 'warm', 'cold', 'unqualified'],
-            description: 'Case viability classification',
+            description: 'Lead classification according to the rubric',
           },
           confidence: {
             type: 'number',
@@ -48,7 +46,7 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
           },
           reasoning: {
             type: 'string',
-            description: 'One to two sentence legal reasoning for the classification',
+            description: 'One to two sentence reasoning for the classification',
           },
         },
         required: ['classification', 'confidence', 'reasoning'],
@@ -59,21 +57,20 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'extract_intent',
-      description: `Extract the key facts from a personal injury intake submission.
-      Identify the nature of injury, incident date, at-fault party, medical treatment status,
-      police report status, and whether the claimant has spoken to another attorney.
-      Surface any red flags or strong case indicators.`,
+      description: `Summarize what the lead wants and extract the key facts they stated,
+      following the extraction guidance in the system prompt. Only include facts the lead
+      actually provided. Never list something just to say it was not mentioned.`,
       parameters: {
         type: 'object',
         properties: {
           intent: {
             type: 'string',
-            description: 'One sentence summary of the claim — what happened and what they need',
+            description: 'One sentence summary: what the lead is asking for or reporting, and what they need',
           },
           needs: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Key case facts extracted: injury type, incident date, at-fault party, treatment, police report, prior attorney',
+            description: 'Key facts the lead stated, per the extraction guidance. Omit anything not mentioned.',
           },
         },
         required: ['intent', 'needs'],
@@ -84,9 +81,9 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'analyze_sentiment',
-      description: `Analyze the emotional state and urgency of a personal injury claimant.
-      People in PI intake are often distressed, frustrated, or confused.
-      Detect their emotional tone and urgency so the attorney can calibrate their approach.`,
+      description: `Analyze the emotional state and urgency of the person who submitted the lead,
+      following the urgency guidance in the system prompt. Detect their tone and urgency so the
+      team can calibrate their approach.`,
       parameters: {
         type: 'object',
         properties: {
@@ -97,11 +94,11 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
           },
           urgency_score: {
             type: 'number',
-            description: 'Urgency from 1 (no rush) to 10 (statute of limitations concern or acute distress)',
+            description: 'Urgency from 1 (no rush) to 10 (extremely urgent), per the urgency guidance',
           },
           tone_notes: {
             type: 'string',
-            description: 'Notes on emotional state, stress indicators, or communication flags the attorney should know',
+            description: 'Notes on emotional state, stress indicators, or communication flags the team should know',
           },
         },
         required: ['sentiment', 'urgency_score', 'tone_notes'],
@@ -112,25 +109,19 @@ export const tools: Groq.Chat.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'draft_response_email',
-      description: `Draft a professional, empathetic response email from Better Call Jon law firm
-      to a personal injury claimant. The email must:
-      - Never discuss fees or payment arrangements
-      - Never give legal advice or case assessments
-      - Always clarify this is an intake acknowledgment only
-      - Be warm but professional — these are people in distress
-      - Include a clear next step (a call, a consultation request)
-      - Hot cases get priority language and urgency
-      - Cold or unqualified cases get a respectful, honest response`,
+      description: `Draft a response email to the lead on behalf of the business, following the
+      business rules and email guidance in the system prompt. The email must follow the hard rules,
+      include a clear next step, and never invent contact details or links.`,
       parameters: {
         type: 'object',
         properties: {
           email_subject: {
             type: 'string',
-            description: 'Professional subject line appropriate for a law firm',
+            description: 'Subject line appropriate for the business',
           },
           email_body: {
             type: 'string',
-            description: 'Full email body. Empathetic, professional, clear CTA. Short paragraphs. No legal advice. No fee discussion.',
+            description: 'Full email body. Short paragraphs, human tone, clear next step.',
           },
         },
         required: ['email_subject', 'email_body'],
@@ -145,6 +136,6 @@ export const analysisTools = tools.filter(t =>
   )
 )
 
-export const emailTool = tools.filter(t =>
-  t.function?.name === 'draft_response_email'
+export const emailTool = tools.filter(
+  t => t.function?.name === 'draft_response_email'
 )
