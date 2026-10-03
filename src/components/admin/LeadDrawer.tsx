@@ -3,11 +3,14 @@
 import { useState, useTransition } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Lead } from '@/types/lead'
+import type { FieldMap } from '@/types/tenant'
 import Badge from '@/components/ui/Badge'
+import { fieldRows } from '@/lib/fields'
 import { approveLead, rejectLead } from '@/app/admin/actions'
 
 interface LeadDrawerProps {
     lead: Lead | null
+    fieldMap?: FieldMap
     onClose: () => void
 }
 
@@ -108,9 +111,13 @@ function ReviewPanel({ lead }: { lead: Lead }) {
     )
 }
 
-export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
+export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps) {
     const reviewable =
         lead?.status === 'pending_review' || lead?.status === 'send_failed'
+
+    // The lead's raw answers, labeled by its tenant's config. Legacy rows
+    // were backfilled into `fields`, so this works for them too.
+    const submissionRows = lead ? fieldRows(fieldMap, lead.fields ?? {}) : []
 
     return (
         <AnimatePresence>
@@ -133,8 +140,8 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', stiffness: 120, damping: 22 }}
                     >
-                        {/* Header — email only. The at-fault/context field can be
-                            a full paragraph, so it lives in the Incident section. */}
+                        {/* Header — email only. Long free-text answers live in
+                            the Submission section, not up here. */}
                         <div className="sticky top-0 bg-surface border-b border-line px-8 py-6 flex items-start justify-between z-10">
                             <div>
                                 <p className="font-data text-[8px] tracking-[0.2em] text-accent uppercase mb-2">
@@ -215,17 +222,18 @@ export default function LeadDrawer({ lead, onClose }: LeadDrawerProps) {
                                 </div>
                             </div>
 
-                            {/* Incident — the raw form answers, labeled for what they
-                                actually are in the PI intake. DB columns are still
-                                company/timeline/budget from the original form. */}
-                            <div>
-                                <p className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase mb-4">
-                                    Incident
-                                </p>
-                                <Row label="At-Fault Party / Context" value={lead.company || '—'} />
-                                <Row label="Incident Date" value={lead.timeline || '—'} />
-                                <Row label="Medical Treatment" value={lead.budget || '—'} />
-                            </div>
+                            {/* Submission — the rest of the form answers, labeled and
+                                formatted by the lead's tenant config. Hidden if empty. */}
+                            {submissionRows.length > 0 && (
+                                <div>
+                                    <p className="font-data text-[8px] tracking-[0.2em] text-ghost uppercase mb-4">
+                                        Submission
+                                    </p>
+                                    {submissionRows.map(row => (
+                                        <Row key={row.key} label={row.label} value={row.value} />
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Email Draft — editable while reviewable, read-only after */}
                             <div>

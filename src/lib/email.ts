@@ -13,6 +13,9 @@ interface SendEmailParams {
   subject: string
   body: string
   firmName?: string
+  // Where the claimant's reply should go. The message still sends from our
+  // Gmail account, but replying lands in the tenant's own inbox.
+  replyTo?: string | null
 }
 
 // The draft comes from a model that read claimant-written text, and the
@@ -30,7 +33,7 @@ function escapeHtml(value: string): string {
 }
 
 export async function sendEmail({
-  to, subject, body, firmName = 'Better Call Jon'
+  to, subject, body, firmName = 'Better Call Jon', replyTo,
 }: SendEmailParams) {
   const paragraphs = body
     .split('\n')
@@ -46,6 +49,7 @@ export async function sendEmail({
   await transporter.sendMail({
     from: `"${safeFromName}" <${process.env.GMAIL_USER}>`,
     to,
+    ...(replyTo ? { replyTo } : {}),
     subject,
     text: body,
     html: `

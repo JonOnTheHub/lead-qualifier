@@ -1,7 +1,11 @@
-// How a tenant's payloads map onto the pipeline.
-//   identity: which payload keys hold the lead's name, email and free-text message
-//   labels:   human labels for payload keys. Shown to the model, and the key order here
-//             decides the order fields appear in the prompt.
+// How a tenant's payloads map onto the pipeline and the admin.
+//   identity:     which payload keys hold the lead's name, email and free-text message
+//   labels:       human labels for payload keys
+//   order:        display order for the remaining fields in admin. Needed because
+//                 jsonb does not preserve key order (Postgres sorts keys by length,
+//                 then alphabetically), so the order of `labels` means nothing.
+//   value_labels: per-field map from raw submitted values to display text,
+//                 e.g. { timeline: { "this-week": "This week" } }
 export interface FieldMap {
     identity?: {
         name?: string
@@ -9,6 +13,8 @@ export interface FieldMap {
         message?: string
     }
     labels?: Record<string, string>
+    order?: string[]
+    value_labels?: Record<string, Record<string, string>>
 }
 
 export interface Tenant {

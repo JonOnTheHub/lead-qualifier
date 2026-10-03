@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email'
 import { isAdmin } from '@/lib/admin-auth'
+import { getTenantById } from '@/lib/tenants'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -25,6 +26,26 @@ export async function approveLead(
     }
 
     const supabase = createAdminClient()
+
+    // Load the sender identity BEFORE claiming. If this lookup fails, we
+    // return without touching the lead. Doing it after the claim could
+    // strand the lead in 'sending'.
+    const { data: lead, error: leadError } = await supabase
+        .from('leads')
+        .select('tenant_id')
+        .eq('id', id)
+        .maybeSingle()
+
+    if (leadError) return { ok: false, error: leadError.message }
+    if (!lead) return { ok: false, error: 'Lead not found' }
+
+    let tenant
+    try {
+        tenant = await getTenantById(lead.tenant_id)
+    } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : 'Tenant lookup failed' }
+    }
+    if (!tenant) return { ok: false, error: 'Tenant not found for this lead' }
 
     // CLAIM: flip to 'sending' only if the lead is still reviewable.
     // Postgres runs this atomically, so if two clicks race, exactly one
@@ -52,8 +73,8 @@ export async function approveLead(
             to: claimed.email,
             subject: cleanSubject,
             body: cleanBody,
-            // Hardcoded until tenants exist. Becomes tenant.firm_name.
-            firmName: 'Better Call Jon',
+            firmName: tenant.name,
+            replyTo: tenant.reply_to_email,
         })
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown send error'

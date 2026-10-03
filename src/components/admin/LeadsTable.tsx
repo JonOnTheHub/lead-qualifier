@@ -2,19 +2,22 @@
 
 import { useState } from 'react'
 import { Lead } from '@/types/lead'
+import type { FieldMap } from '@/types/tenant'
 import Badge from '@/components/ui/Badge'
 import LeadDrawer from './LeadDrawer'
 
 interface LeadsTableProps {
     leads: Lead[]
+    fieldMaps: Record<string, FieldMap>
 }
 
-export default function LeadsTable({ leads }: LeadsTableProps) {
+export default function LeadsTable({ leads, fieldMaps }: LeadsTableProps) {
     // Store the id, not the lead. After approve/reject the server
     // re-sends fresh leads, and deriving the active lead from them
     // keeps the open drawer in sync instead of showing a stale copy.
     const [activeId, setActiveId] = useState<string | null>(null)
     const active = leads.find(l => l.id === activeId) ?? null
+    const activeFieldMap = active?.tenant_id ? fieldMaps[active.tenant_id] : undefined
 
     if (leads.length === 0) {
         return (
@@ -84,7 +87,11 @@ export default function LeadsTable({ leads }: LeadsTableProps) {
                 </tbody>
             </table>
 
-            <LeadDrawer lead={active} onClose={() => setActiveId(null)} />
+            <LeadDrawer
+                lead={active}
+                fieldMap={activeFieldMap}
+                onClose={() => setActiveId(null)}
+            />
         </>
     )
 }

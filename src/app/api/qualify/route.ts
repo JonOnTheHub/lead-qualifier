@@ -101,19 +101,23 @@ export async function POST(req: NextRequest) {
         if (dbError) throw new Error(`Supabase insert failed: ${dbError.message}`)
 
         // Slack is a heads-up only. If it fails, the lead is still
-        // safely in the queue, so we swallow the error.
-        const company = text('company')
+        // safely in the queue, so we swallow the error. notifySlack
+        // returns false when no webhook is configured, so we only mark
+        // the lead as notified when a message actually went out.
         let slackNotified = false
         try {
-            await notifySlack({
-                name: contact.name,
-                company: company.length > 40 ? `${company.slice(0, 40)}...` : company,
-                classification: result.ai.classification,
-                urgency_score: result.ai.urgency_score,
-                intent: result.ai.intent,
-                lead_id: lead.id,
-            })
-            slackNotified = true
+            slackNotified = await notifySlack(
+                {
+                    name: contact.name,
+                    context: text('company'),
+                    classification: result.ai.classification,
+                    urgency_score: result.ai.urgency_score,
+                    intent: result.ai.intent,
+                    lead_id: lead.id,
+                    tenantName: tenant.name,
+                },
+                tenant.slack_webhook_url,
+            )
         } catch (err) {
             console.warn('[qualify] slack failed:', err)
         }

@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import StatsStrip from '@/components/admin/StatsStrip'
 import LeadsTable from '@/components/admin/LeadsTable'
 import { Lead } from '@/types/lead'
+import type { FieldMap } from '@/types/tenant'
 
 // Always fetch fresh — never serve cached lead data from edge
 export const dynamic = 'force-dynamic'
@@ -9,10 +10,12 @@ export const dynamic = 'force-dynamic'
 export default async function AdminPage() {
     const supabase = createAdminClient()
 
-    const { data: leads, error } = await supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false })
+    const [leadsRes, tenantsRes] = await Promise.all([
+        supabase.from('leads').select('*').order('created_at', { ascending: false }),
+        supabase.from('tenants').select('id, field_map'),
+    ])
+
+    const { data: leads, error } = leadsRes
 
     if (error) {
         return (
@@ -23,6 +26,12 @@ export default async function AdminPage() {
             </div>
         )
     }
+
+    // tenant_id -> field map, so the drawer can label each lead's fields.
+    // If this lookup fails, the drawer falls back to prettified keys.
+    const fieldMaps: Record<string, FieldMap> = Object.fromEntries(
+        (tenantsRes.data ?? []).map(t => [t.id, t.field_map as FieldMap]),
+    )
 
     return (
         <main className="min-h-dvh bg-background">
@@ -44,7 +53,7 @@ export default async function AdminPage() {
             <StatsStrip leads={leads as Lead[]} />
 
             {/* Table */}
-            <LeadsTable leads={leads as Lead[]} />
+            <LeadsTable leads={leads as Lead[]} fieldMaps={fieldMaps} />
 
         </main>
     )

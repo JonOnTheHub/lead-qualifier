@@ -1,10 +1,11 @@
 interface SlackLeadPayload {
   name: string
-  company: string
+  context: string // short extra line next to the name (may be empty)
   classification: string
   urgency_score: number
   intent: string
   lead_id: string
+  tenantName: string
 }
 
 // Color coding the Slack attachment sidebar by classification
@@ -15,15 +16,39 @@ const classificationColor: Record<string, string> = {
   unqualified: '#666666',
 }
 
-export async function notifySlack(payload: SlackLeadPayload) {
-  const { name, company, classification, urgency_score, intent, lead_id } = payload
+// Slack mrkdwn treats &, < and > as control characters. Claimant-supplied
+// text containing <!channel> or <https://evil|click here> would otherwise
+// ping the whole channel or render a disguised link. Slack's own docs say
+// to escape exactly these three.
+function esc(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
-  const webhookUrl = process.env.SLACK_WEBHOOK_URL
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}...` : text
+}
+
+// Returns true if a message was actually sent, false if no webhook is
+// configured. Throws if Slack rejects the request. Callers use the return
+// value to decide whether to mark the lead as notified.
+export async function notifySlack(
+  payload: SlackLeadPayload,
+  tenantWebhookUrl?: string | null,
+): Promise<boolean> {
+  const { name, context, classification, urgency_score, intent, lead_id, tenantName } = payload
+
+  // The tenant's own webhook wins. The env var is the fallback so the
+  // existing setup keeps working until a tenant gets its own channel.
+  const webhookUrl = tenantWebhookUrl || process.env.SLACK_WEBHOOK_URL
 
   if (!webhookUrl) {
-    console.warn('[slack] SLACK_WEBHOOK_URL not set — skipping notification')
-    return
+    console.warn('[slack] no webhook configured for this tenant or in env — skipping')
+    return false
   }
+
+  const headline = [esc(name), context ? esc(truncate(context, 40)) : '']
+    .filter(Boolean)
+    .join(' · ')
 
   // Slack Block Kit — structured message with a colored sidebar
   const body = {
@@ -36,7 +61,7 @@ export async function notifySlack(payload: SlackLeadPayload) {
             text: {
               type: 'mrkdwn',
               // Classification uppercased as a visual anchor
-              text: `*New Lead — ${classification.toUpperCase()}*\n${name} · ${company}`,
+              text: `*New Lead — ${classification.toUpperCase()}*\n${headline}`,
             },
           },
           {
@@ -56,7 +81,9 @@ export async function notifySlack(payload: SlackLeadPayload) {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `*Intent*\n${intent}`,
+              // Section text is capped at 3000 chars by Slack. Intent is one
+              // sentence in practice, but never trust model output for size.
+              text: `*Intent*\n${esc(truncate(intent, 600))}`,
             },
           },
           {
@@ -68,7 +95,7 @@ export async function notifySlack(payload: SlackLeadPayload) {
               {
                 type: 'mrkdwn',
                 // Nothing has been sent yet. A human approves the draft first.
-                text: `Processed by AI Lead Qualifier · Draft awaiting review`,
+                text: `Intake · ${esc(tenantName)} · Draft awaiting review`,
               },
             ],
           },
@@ -86,4 +113,6 @@ export async function notifySlack(payload: SlackLeadPayload) {
   if (!res.ok) {
     throw new Error(`Slack webhook failed: ${res.status}`)
   }
+
+  return true
 }
