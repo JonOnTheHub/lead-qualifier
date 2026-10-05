@@ -55,24 +55,39 @@ function labelFor(tenant: Tenant, key: string): string {
     return tenant.field_map.labels?.[key] ?? key.replace(/[_-]+/g, ' ').trim()
 }
 
-// Turns an arbitrary payload into labeled lines for the model. Labeled
-// keys come first, in the order the tenant defined them. Unknown keys
-// follow, with a prettified key as the label.
-export function buildSubmissionText(tenant: Tenant, payload: Payload): string {
-    const labels = tenant.field_map.labels ?? {}
-    const keys = [
-        ...Object.keys(labels).filter(k => k in payload),
-        ...Object.keys(payload).filter(k => !(k in labels)),
-    ]
+// The tenant's display text for a raw value ("this-week" -> "This week").
+// Unmapped values pass through untouched, so free text is never altered.
+function valueFor(tenant: Tenant, key: string, raw: string): string {
+    return tenant.field_map.value_labels?.[key]?.[raw] ?? raw
+}
 
+// Prompt order: identity fields first, then the tenant's explicit `order`,
+// then labeled keys, then anything else. Explicit order is needed because
+// jsonb does not preserve key order (it sorts by length, then alphabetically).
+function orderedKeys(tenant: Tenant, payload: Payload): string[] {
+    const map = tenant.field_map
+    const id = map.identity ?? {}
+    const keys = [
+        id.name ?? 'name',
+        id.email ?? 'email',
+        id.message ?? 'message',
+        ...(map.order ?? []),
+        ...Object.keys(map.labels ?? {}),
+        ...Object.keys(payload),
+    ]
+    return [...new Set(keys)].filter(k => k in payload)
+}
+
+// Turns an arbitrary payload into labeled lines for the model.
+export function buildSubmissionText(tenant: Tenant, payload: Payload): string {
     const lines: string[] = []
     let total = 0
-    for (const key of keys) {
-        const value = stringify(payload[key]).slice(0, MAX_FIELD_CHARS)
-        if (!value) continue
-        if (total + value.length > MAX_TOTAL_CHARS) break
-        total += value.length
-        lines.push(`${labelFor(tenant, key)}: ${value}`)
+    for (const key of orderedKeys(tenant, payload)) {
+        const raw = stringify(payload[key]).slice(0, MAX_FIELD_CHARS)
+        if (!raw) continue
+        if (total + raw.length > MAX_TOTAL_CHARS) break
+        total += raw.length
+        lines.push(`${labelFor(tenant, key)}: ${valueFor(tenant, key, raw)}`)
     }
     return lines.join('\n')
 }
@@ -169,6 +184,27 @@ async function detectLanguage(text: string): Promise<string> {
     return language || 'English'
 }
 
+// Pinned language wins and skips the model call entirely. Otherwise detect,
+// with retries. If detection still fails, fall back to English instead of
+// failing the whole submission: a human reviews every draft before it sends,
+// and language is the least damaging thing to get wrong.
+async function resolveReplyLanguage(tenant: Tenant, text: string): Promise<string> {
+    const pinned = tenant.reply_language?.trim()
+    if (pinned) return pinned
+
+    try {
+        return await withRetry(() => detectLanguage(text), {
+            maxAttempts: 3,
+            baseDelayMs: 500,
+            onRetry: (attempt, err) =>
+                console.warn(`[pipeline] language detection retry ${attempt}:`, err),
+        })
+    } catch (err) {
+        console.warn('[pipeline] language detection failed, defaulting to English:', err)
+        return 'English'
+    }
+}
+
 // ─────────────────────────────────────────────
 // SINGLE FORCED TOOL CALL
 // gpt-oss does not reliably emit several tool calls from one request,
@@ -228,14 +264,10 @@ export async function runPipeline(
     const submission = buildSubmissionText(tenant, payload)
     const contact = extractContact(tenant, payload)
 
-    // Pinned language skips the detection call entirely.
-    const replyLanguage =
-        tenant.reply_language?.trim() ||
-        (await detectLanguage(contact.message || submission))
-
     // ── TURN 1: three forced tool calls, concurrent ──
     // Turn 1 is internal (admin, Slack), so it is always English and
-    // never needs to know the submitter's language.
+    // never needs the submitter's language. That is why language detection
+    // can run alongside it instead of in front of it.
 
     const base = [
         tenant.business_context,
@@ -260,13 +292,19 @@ export async function runPipeline(
 
     const turn1Start = Date.now()
 
-    const [classifyRun, intentRun, sentimentRun] = await Promise.all([
+    const turn1Promise = Promise.all([
         runTool('classify_lead', turn1System('classify_lead', tenant.classification_rubric), userPrompt),
         runTool('extract_intent', turn1System('extract_intent', tenant.extraction_guidance), userPrompt),
         runTool('analyze_sentiment', turn1System('analyze_sentiment', tenant.urgency_guidance), userPrompt),
+    ]).then(runs => ({ runs, latencyMs: Date.now() - turn1Start }))
+
+    // Detection and Turn 1 overlap. Total time is the slower of the two.
+    const [replyLanguage, turn1] = await Promise.all([
+        resolveReplyLanguage(tenant, contact.message || submission),
+        turn1Promise,
     ])
 
-    const turn1Latency = Date.now() - turn1Start
+    const [classifyRun, intentRun, sentimentRun] = turn1.runs
 
     // ── VALIDATE + DEFENSIVE FALLBACKS ──
 
@@ -303,7 +341,7 @@ export async function runPipeline(
     // (that caused hallucinated tool names).
 
     const analysisSummary = `
-Intake analysis complete for ${tenant.name}. Draft the response email:
+Internal intake analysis for ${tenant.name}. This is for your eyes only, not for the email:
 
 Classification: ${classify.classification} (${Math.round(classify.confidence * 100)}% confidence)
 Reasoning: ${classify.reasoning}
@@ -324,8 +362,11 @@ Write the subject and body in ${replyLanguage}.
         tenant.business_context,
         tenant.hard_rules,
         tenant.email_guidance,
+        'The analysis you are given is internal. Never state, hint at, or paraphrase the classification, reasoning, confidence, urgency score or tone notes in the email. Respond only to what the lead told us, and explain the next step.',
         'Never invent phone numbers, email addresses, links, or scheduling tools that were not given above.',
-        tenant.email_signoff ? `Always sign the email as "${tenant.email_signoff}".` : '',
+        tenant.email_signoff
+            ? `Sign the email with exactly this sign-off and nothing else: "${tenant.email_signoff}". Do not add a personal name, title or extra closing line above or below it.`
+            : '',
         'Short paragraphs. Human tone. Clear next step.',
         replyLanguage === 'English'
             ? ''
@@ -381,8 +422,8 @@ Write the subject and body in ${replyLanguage}.
         },
         replyLanguage,
         turn1: {
-            usage: sumUsage([classifyRun.usage, intentRun.usage, sentimentRun.usage]),
-            latencyMs: turn1Latency,
+            usage: sumUsage(turn1.runs.map(r => r.usage)),
+            latencyMs: turn1.latencyMs,
         },
         turn2: { usage: toUsage(turn2Response.usage), latencyMs: turn2Latency },
     }
