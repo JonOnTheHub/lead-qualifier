@@ -15,7 +15,7 @@ export function SubmitButton({ loading, success, onClick }: SubmitButtonProps) {
             onClick={onClick}
             disabled={loading || success}
             whileTap={{ scale: 0.98, y: 1 }}
-            className="relative overflow-hidden px-10 py-3.5 bg-accent text-[#0B1120] font-data text-[10px] tracking-[0.25em] uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+            className="relative overflow-hidden px-10 py-3.5 bg-accent text-text font-data text-[10px] tracking-[0.25em] uppercase disabled:opacity-50 disabled:cursor-not-allowed"
         >
             {/* Hover fill — enters from left */}
             <motion.div
@@ -34,7 +34,7 @@ export function SubmitButton({ loading, success, onClick }: SubmitButtonProps) {
                         exit={{ opacity: 0 }}
                         className="relative flex items-center gap-3"
                     >
-                        <span className="w-3 h-3 rounded-full border border-[#0B1120]/30 border-t-[#0B1120] animate-spin inline-block" />
+                        <span className="w-3 h-3 rounded-full border border-text/30 border-t-text animate-spin inline-block" />
                         Processing
                     </motion.span>
                 ) : (

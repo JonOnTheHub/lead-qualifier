@@ -1,33 +1,66 @@
 @import "tailwindcss";
 
-@theme {
+/* Fonts come from next/font in layout.tsx, which sets --font-serif, --font-sans
+   and --font-data on <html>. `inline` makes the utilities read those variables
+   directly instead of redefining them (the old self-referencing version relied
+   on cascade order to work). */
+@theme inline {
   --font-serif: var(--font-serif);
   --font-sans: var(--font-sans);
   --font-data: var(--font-data);
-
-  --color-background: #0B1120;
-  --color-surface: #111827;
-  --color-surface-2: #1a2235;
-  --color-border: #1E2D45;
-  --color-border-subtle: #162035;
-  --color-accent: #B8C722;
-  --color-accent-dim: #8a9619;
-  --color-text: #E8D9B0;
-  --color-text-muted: #8A9BB5;
-  --color-text-dim: #4A5A72;
 }
 
-* { box-sizing: border-box; }
+@theme {
+  --color-background: #080808;
+  --color-surface: #0f0f0f;
+  --color-surface-2: #161616;
+  --color-border: #222222;
+  --color-border-subtle: #1a1a1a;
+  --color-red: #c8102e;
+  --color-red-dim: #8a0c20;
+  --color-text: #f0ebe1;
+  --color-text-muted: #888888;
+  --color-text-dim: #555555;
 
-::selection { background: #B8C722; color: #0B1120; }
+  /* Accent is the red. Components say bg-accent / text-accent. */
+  --color-accent: #c8102e;
+  --color-accent-dim: #8a0c20;
 
-::-webkit-scrollbar { width: 1px; }
-::-webkit-scrollbar-track { background: #0B1120; }
-::-webkit-scrollbar-thumb { background: #B8C722; }
+  /* The admin and demo components use text-ink, text-ghost and border-line.
+     Those names were never defined, so Tailwind silently generated nothing for
+     them (borders fell back to the text color). Aliased here to the real tokens. */
+  --color-ink: #f0ebe1;
+  --color-ghost: #888888;
+  --color-line: #222222;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #c8102e;
+  color: #f0ebe1;
+}
+
+::-webkit-scrollbar {
+  width: 1px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c8102e;
+}
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
 }
 
-option { background: #111827; color: #E8D9B0; }
+option {
+  background: #0f0f0f;
+  color: #f0ebe1;
+}

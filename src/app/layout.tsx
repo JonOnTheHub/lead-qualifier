@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
-import { Audiowide, IBM_Plex_Sans, Turret_Road } from 'next/font/google'
+import { IBM_Plex_Serif, IBM_Plex_Sans, Turret_Road } from 'next/font/google'
 import './globals.css'
 
-const serif = Audiowide({
+const serif = IBM_Plex_Serif({
   subsets: ['latin'],
-  weight: ['400'],
+  weight: ['300', '400'],
+  style: ['normal', 'italic'],
   variable: '--font-serif',
   display: 'swap',
 })

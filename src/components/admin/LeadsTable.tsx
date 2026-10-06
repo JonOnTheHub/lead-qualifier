@@ -31,61 +31,63 @@ export default function LeadsTable({ leads, fieldMaps }: LeadsTableProps) {
 
     return (
         <>
-            <table className="w-full">
-                <thead>
-                    <tr className="border-b border-line">
-                        {['Name', 'At Fault / Context', 'Classification', 'Sentiment', 'Urgency', 'Status', 'Submitted'].map(col => (
-                            <th
-                                key={col}
-                                className="px-8 py-4 text-left font-data text-[8px] tracking-[0.2em] text-ghost uppercase font-normal"
-                            >
-                                {col}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {leads.map(lead => (
-                        <tr
-                            key={lead.id}
-                            onClick={() => setActiveId(lead.id)}
-                            className="border-b border-line cursor-pointer hover:bg-surface transition-colors group"
-                        >
-                            <td className="px-8 py-5">
-                                <p className="font-sans text-sm text-ink">{lead.name}</p>
-                                <p className="font-sans text-xs text-ghost mt-0.5">{lead.email}</p>
-                            </td>
-                            <td className="px-8 py-5 font-sans text-sm text-ghost">
-                                {/* The field can hold a whole paragraph, so cap the width
-                                    and truncate. Full text is on hover and in the drawer. */}
-                                <span
-                                    className="block max-w-[260px] truncate"
-                                    title={lead.company}
+            <div className="mx-8 mb-8 overflow-x-auto rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.008))]">
+                <table className="w-full min-w-[820px]">
+                    <thead>
+                        <tr className="border-b border-white/[0.08]">
+                            {['Name', 'At Fault / Context', 'Classification', 'Sentiment', 'Urgency', 'Status', 'Submitted'].map(col => (
+                                <th
+                                    key={col}
+                                    className="px-6 py-4 text-left font-data text-[9px] tracking-[0.2em] text-ghost uppercase font-normal"
                                 >
-                                    {lead.company || '—'}
-                                </span>
-                            </td>
-                            <td className="px-8 py-5">
-                                <Badge value={lead.classification} />
-                            </td>
-                            <td className="px-8 py-5">
-                                <Badge value={lead.sentiment} />
-                            </td>
-                            <td className="px-8 py-5 font-data text-sm text-ink">
-                                {lead.urgency_score}/10
-                            </td>
-                            <td className="px-8 py-5">
-                                <Badge value={lead.status} />
-                            </td>
-                            <td className="px-8 py-5 font-data text-[10px] text-ghost tracking-wider">
-                                {new Date(lead.created_at).toLocaleDateString('en-GB', {
-                                    day: 'numeric', month: 'short', year: 'numeric',
-                                })}
-                            </td>
+                                    {col}
+                                </th>
+                            ))}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {leads.map(lead => (
+                            <tr
+                                key={lead.id}
+                                onClick={() => setActiveId(lead.id)}
+                                className="border-b border-white/[0.05] last:border-0 cursor-pointer hover:bg-white/[0.03] transition-colors"
+                            >
+                                <td className="px-6 py-5">
+                                    <p className="font-sans text-sm text-ink">{lead.name}</p>
+                                    <p className="font-sans text-xs text-ghost mt-0.5">{lead.email}</p>
+                                </td>
+                                <td className="px-6 py-5 font-sans text-sm text-ghost">
+                                    {/* The field can hold a whole paragraph, so cap the width
+                                        and truncate. Full text is on hover and in the drawer. */}
+                                    <span
+                                        className="block max-w-[260px] truncate"
+                                        title={lead.company}
+                                    >
+                                        {lead.company || '—'}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-5">
+                                    <Badge value={lead.classification} />
+                                </td>
+                                <td className="px-6 py-5">
+                                    <Badge value={lead.sentiment} />
+                                </td>
+                                <td className="px-6 py-5 font-data text-sm text-ink">
+                                    {lead.urgency_score}/10
+                                </td>
+                                <td className="px-6 py-5">
+                                    <Badge value={lead.status} />
+                                </td>
+                                <td className="px-6 py-5 font-data text-[10px] text-ghost tracking-wider">
+                                    {new Date(lead.created_at).toLocaleDateString('en-GB', {
+                                        day: 'numeric', month: 'short', year: 'numeric',
+                                    })}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
 
             <LeadDrawer
                 lead={active}
