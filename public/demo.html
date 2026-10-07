@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Intake: stop losing leads to slow replies</title>
+    <meta name="description"
+        content="A 2-minute interactive look at how Intake reads inbound messages, drafts the reply, and lets you approve it before anything is sent.">
+    <meta property="og:title" content="Intake: stop losing leads to slow replies">
+    <meta property="og:description"
+        content="Pick a business, watch Intake read a lead and draft the reply, then approve it yourself.">
+    <meta property="og:type" content="website">
+    <meta name="theme-color" content="#080808">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Serif:ital,wght@0,300;1,300&family=Turret+Road:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #080808;
+            --sf: #0f0f0f;
+            --ln: #222222;
+            --ink: #f0ebe1;
+            --gh: #888888;
+            --ac: #c8102e;
+            --ai: #fff;
+            --hot: #FF5A5F;
+            --warm: #F0A35E;
+            --cold: #6BAEE6;
+            --good: #6BC98A;
+            --serif: 'IBM Plex Serif', Georgia, serif;
+            --sans: 'IBM Plex Sans', system-ui, sans-serif;
+            --data: 'Turret Road', 'IBM Plex Sans', sans-serif;
+            box-sizing: border-box;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px)
+        }
+
+        html {
+            scroll-padding-top: env(safe-area-inset-top, 0px);
+            height: 100%
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            min-height: 100%;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
+            display: flex;
+            flex-direction: column
+        }
+
+        header,
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 22px;
+            border: 0 solid var(--ln)
+        }
+
+        header {
+            border-bottom-width: 1px;
+            font-family: var(--data);
+            font-size: 14px;
+            letter-spacing: .03em
+        }
+
+        #ttl {
+            color: var(--gh);
+            font-size: 12px
+        }
+
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 40px 22px 56px
+        }
+
+        nav {
+            position: sticky;
+            bottom: 0;
+            background: color-mix(in srgb, var(--bg) 88%, transparent);
+            backdrop-filter: blur(10px);
+            border-top-width: 1px
+        }
+
+        nav button {
+            background: none;
+            border: 0;
+            color: var(--gh);
+            font: inherit;
+            font-size: 14px;
+            min-height: 44px;
+            min-width: 56px;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: color .2s
+        }
+
+        nav button:hover:not(:disabled) {
+            color: var(--ink)
+        }
+
+        nav button:disabled {
+            opacity: .3
+        }
+
+        nav .next {
+            color: var(--ink)
+        }
+
+        .dots {
+            display: flex
+        }
+
+        .dots button {
+            width: 22px;
+            min-width: 0;
+            padding: 0;
+            position: relative
+        }
+
+        .dots button:after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 7px;
+            height: 7px;
+            border-radius: 4px;
+            background: var(--ln);
+            transform: translate(-50%, -50%);
+            transition: width .25s, background .25s
+        }
+
+        .dots .on:after {
+            width: 20px;
+            background: var(--ac)
+        }
+
+        h1,
+        h2 {
+            font-family: var(--serif);
+            font-weight: 300;
+            line-height: 1.15;
+            margin: 0
+        }
+
+        h1 {
+            font-size: clamp(32px, 7vw, 54px)
+        }
+
+        h2 {
+            font-size: clamp(26px, 5vw, 38px)
+        }
+
+        .sub {
+            color: var(--gh);
+            line-height: 1.65;
+            max-width: 560px;
+            margin: 14px 0 28px
+        }
+
+        .card {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .012));
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05)
+        }
+
+        .lbl {
+            font-family: var(--data);
+            letter-spacing: .03em;
+            font-size: 12px;
+            color: var(--gh);
+            margin: 0 0 8px
+        }
+
+        .bento {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: 1fr
+        }
+
+        @media(min-width:760px) {
+            .bento {
+                grid-template-columns: repeat(6, 1fr)
+            }
+
+            .s2 {
+                grid-column: span 2
+            }
+
+            .s3 {
+                grid-column: span 3
+            }
+
+            .s4 {
+                grid-column: span 4
+            }
+
+            .s6 {
+                grid-column: span 6
+            }
+        }
+
+        .pick {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 22px
+        }
+
+        .pick button {
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid rgba(255, 255, 255, .1);
+            color: var(--gh);
+            font: inherit;
+            font-size: 14px;
+            min-height: 44px;
+            padding: 0 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: border-color .2s, color .2s, transform .12s
+        }
+
+        .pick button:hover {
+            color: var(--ink)
+        }
+
+        .pick button:active {
+            transform: scale(.97)
+        }
+
+        .pick .on {
+            border-color: var(--ac);
+            color: var(--ink);
+            background: color-mix(in srgb, var(--ac) 12%, transparent)
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 0 24px;
+            border-radius: 8px;
+            border: 1px solid #8E1A27;
+            background: linear-gradient(180deg, #B0222F, #A21E2C);
+            color: #F4EFE9;
+            font: inherit;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 1px 2px rgba(0, 0, 0, .45);
+            transition: transform .12s, filter .2s, background .2s
+        }
+
+        .btn:hover:not(:disabled) {
+            filter: brightness(1.07)
+        }
+
+        .btn:active:not(:disabled) {
+            transform: scale(.985)
+        }
+
+        .btn:disabled {
+            cursor: default;
+            opacity: .65
+        }
+
+        .btn.glass {
+            background: rgba(255, 255, 255, .04);
+            color: var(--ink);
+            border-color: rgba(255, 255, 255, .12);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05)
+        }
+
+        .btn.glass:hover:not(:disabled) {
+            background: rgba(255, 255, 255, .07);
+            filter: none
+        }
+
+        .btn.sm {
+            min-height: 44px;
+            padding: 0 16px;
+            font-size: 14px
+        }
+
+        .btn.w {
+            flex: 1
+        }
+
+        .sp {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, .3);
+            border-top-color: #F4EFE9;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            margin-right: 10px
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(1turn)
+            }
+        }
+
+        .link {
+            background: none;
+            border: 0;
+            color: var(--ac);
+            font: inherit;
+            font-size: 14px;
+            min-height: 44px;
+            cursor: pointer;
+            padding: 0 4px;
+            filter: brightness(1.25)
+        }
+
+        .quote {
+            font-family: var(--serif);
+            font-style: italic;
+            font-weight: 300;
+            line-height: 1.65;
+            border-left: 2px solid var(--ac);
+            padding-left: 14px;
+            margin: 0;
+            opacity: .88
+        }
+
+        .t {
+            font-size: 14px;
+            line-height: 1.65;
+            margin: 0;
+            opacity: .88
+        }
+
+        .small {
+            font-size: 12px;
+            color: var(--gh);
+            line-height: 1.6
+        }
+
+        .big {
+            font-family: var(--data);
+            font-size: clamp(40px, 10vw, 60px);
+            line-height: 1;
+            color: var(--ac);
+            filter: brightness(1.2)
+        }
+
+        .chip {
+            display: inline-block;
+            font-size: 12px;
+            color: var(--gh);
+            border: 1px solid var(--ln);
+            border-radius: 20px;
+            padding: 4px 11px;
+            margin: 0 6px 6px 0
+        }
+
+        .pill {
+            display: inline-block;
+            font-family: var(--data);
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+            background: color-mix(in srgb, var(--c) 12%, transparent);
+            color: var(--c);
+            margin-right: 6px
+        }
+
+        .hot,
+        .negative {
+            --c: var(--hot)
+        }
+
+        .warm,
+        .pending {
+            --c: var(--warm)
+        }
+
+        .cold {
+            --c: var(--cold)
+        }
+
+        .positive,
+        .sent {
+            --c: var(--good)
+        }
+
+        .neutral,
+        .rejected {
+            --c: var(--gh)
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 18px
+        }
+
+        li {
+            font-size: 13px;
+            line-height: 1.65;
+            color: var(--gh);
+            margin-bottom: 6px
+        }
+
+        .card li {
+            color: inherit;
+            opacity: .88
+        }
+
+        textarea {
+            width: 100%;
+            background: rgba(0, 0, 0, .4);
+            border: 1px solid var(--ln);
+            border-radius: 12px;
+            color: var(--ink);
+            font: inherit;
+            font-size: 14px;
+            line-height: 1.65;
+            padding: 14px;
+            resize: vertical
+        }
+
+        textarea:focus {
+            outline: 0;
+            border-color: var(--ac)
+        }
+
+        textarea:disabled {
+            opacity: .6
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px
+        }
+
+        .q {
+            padding: 12px 6px;
+            border-bottom: 1px solid var(--ln);
+            border-radius: 8px
+        }
+
+        .q:last-child {
+            border: 0
+        }
+
+        .slack {
+            border-left: 4px solid var(--c, var(--gh))
+        }
+
+        .bar {
+            height: 8px;
+            border-radius: 4px;
+            background: var(--ln);
+            margin: 6px 0 16px;
+            overflow: hidden
+        }
+
+        .bar i {
+            display: block;
+            height: 100%;
+            border-radius: 4px;
+            background: var(--ac)
+        }
+
+        .pain p {
+            font-size: 17px;
+            line-height: 1.6;
+            margin: 0 0 20px;
+            max-width: 620px
+        }
+
+        .stack {
+            padding: 0
+        }
+
+        .stack li {
+            list-style: none;
+            margin: 0 0 14px;
+            padding-left: 28px;
+            position: relative;
+            font-size: 15px;
+            color: inherit;
+            opacity: .92;
+            line-height: 1.55
+        }
+
+        .stack li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--good)
+        }
+
+        .steps {
+            counter-reset: s;
+            padding: 0
+        }
+
+        .steps li {
+            list-style: none;
+            counter-increment: s;
+            padding-left: 34px;
+            position: relative;
+            font-size: 14px;
+            color: inherit;
+            opacity: .9;
+            margin-bottom: 12px
+        }
+
+        .steps li:before {
+            content: counter(s);
+            position: absolute;
+            left: 0;
+            top: -1px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: color-mix(in srgb, var(--ac) 20%, transparent);
+            color: var(--ink);
+            text-align: center;
+            font-family: var(--data);
+            font-size: 12px;
+            line-height: 24px
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--ac);
+            outline-offset: 2px
+        }
+
+        @media(prefers-reduced-motion:no-preference) {
+            main>div {
+                animation: sl .25s ease-out
+            }
+
+            @keyframes sl {
+                from {
+                    opacity: 0;
+                    transform: translateX(12px)
+                }
+            }
+
+            .in {
+                animation: up .55s var(--d, 0s) both
+            }
+
+            @keyframes up {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px)
+                }
+            }
+
+            .wipe {
+                animation: wipe 1s steps(40) both
+            }
+
+            @keyframes wipe {
+                from {
+                    clip-path: inset(0 100% 0 0)
+                }
+            }
+
+            .fill {
+                animation: fill 1.1s var(--d, .4s) cubic-bezier(.2, .7, .2, 1) both
+            }
+
+            @keyframes fill {
+                from {
+                    width: 0
+                }
+            }
+
+            .pop {
+                animation: pop .45s cubic-bezier(.3, 1.6, .5, 1)
+            }
+
+            @keyframes pop {
+                from {
+                    transform: scale(.6);
+                    opacity: 0
+                }
+            }
+
+            .drop {
+                animation: drop .5s cubic-bezier(.2, .8, .2, 1) both
+            }
+
+            @keyframes drop {
+                from {
+                    transform: translateY(-14px);
+                    opacity: 0
+                }
+            }
+
+            .flash {
+                animation: fl 1.3s
+            }
+
+            @keyframes fl {
+                from {
+                    background: color-mix(in srgb, var(--ac) 22%, transparent)
+                }
+            }
+
+            .scan {
+                position: relative;
+                overflow: hidden
+            }
+
+            .scan:after {
+                content: "";
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 40%;
+                left: -40%;
+                background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ac) 20%, transparent), transparent);
+                animation: sc 1.2s .1s 1 both
+            }
+
+            @keyframes sc {
+                to {
+                    left: 100%
+                }
+            }
+
+            .still *:not(.pop) {
+                animation: none !important
+            }
+
+            .still {
+                animation: none !important
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header><span>Intake</span><span id="ttl"></span></header>
+    <main id="m"></main>
+    <nav><button id="bk">Back</button>
+        <div class="dots" id="dots"></div><button class="next" id="nx">Next</button>
+    </nav>
+    <script>
+        // The businesses and messages are illustrative: Intake produces output of this shape from each business's own rules.
+        const B = [
+            {
+                id: 'agency', tab: 'Marketing agency', firm: 'Brightline Studio', who: 'Priya Nair',
+                form: ['Northfield Outdoor', 'Budget $8k to $12k a month', 'Wants to start next month'],
+                msg: `We sell camping gear online and our paid social has stalled. We want an agency to rebuild our ads and creative before the holidays. Budget is approved. Can we get a call this week?`,
+                rules: `A hot lead has a budget above $5k a month, a start date within 60 days, and the person who decides is writing in. Students, vendors and people with no budget are cold.`,
+                cls: 'hot', conf: 92, sent: 'positive', urg: 7, why: 'The budget is above your minimum, the start date is close, and approval is already in place.',
+                intent: 'An online retailer wants its paid social rebuilt before the holidays.', needs: ['$8k to $12k a month, approved', 'Starting next month', 'Wants a call this week'],
+                tone: 'Confident and in a hurry. Has a deadline and the power to decide.', subj: 'Thanks for reaching out about your paid social',
+                mail: `Hi Priya,\n\nThanks for getting in touch. Rebuilding paid social and ad creative ahead of the holidays is the kind of project we take on, and we have noted your timeline.\n\nA member of our team will reply shortly with a few times for a call this week.\n\nBest,\nThe Brightline Studio team`
+            },
+            {
+                id: 'saas', tab: 'Software company', firm: 'Routewise', who: 'Marcus Hale',
+                form: ['Halden Logistics', '200 to 500 employees', 'Deciding by March'],
+                msg: `We run dispatch for 40 trucks out of spreadsheets and it is breaking. Looking at a few tools. Could you show us how yours handles route changes? Our contract with the current vendor ends in March.`,
+                rules: `A hot lead has 50+ employees, a clear problem, and a decision within 90 days. Real interest with no near-term deadline is warm. Students, competitors and personal emails are cold.`,
+                cls: 'warm', conf: 84, sent: 'neutral', urg: 5, why: 'A real problem and the right company size, but the contract ends in March, outside your 90-day window.',
+                intent: 'A logistics company outgrowing spreadsheets wants to see how route changes are handled.', needs: ['Dispatch for about 40 trucks', 'Spreadsheets are breaking', 'Contract ends in March'],
+                tone: 'Practical and a little frustrated with the current setup. Comparing options, not rushing.', subj: 'Your dispatch questions, and a look at route changes',
+                mail: `Hi Marcus,\n\nThanks for the details. Moving 40 trucks off spreadsheets is a common point to switch, and route changes are one of the things teams most want handled well.\n\nWe will send a short walkthrough focused on route changes, plus a few times if you would like to see it live. With your contract running to March, there is no pressure on timing.\n\nBest,\nThe Routewise team`
+            },
+            {
+                id: 'recruit', tab: 'Recruiting firm', firm: 'Alder & Finch Search', who: 'Lena Brandt',
+                form: ['No company (student)', 'No open role', 'Research request'],
+                msg: `Hi, I am a student working on a thesis about hiring trends. Could you share your placement data and fees for the last five years? Thanks!`,
+                rules: `A hot lead is a hiring manager with an open role and a budget. Students, researchers and anyone selling us services are cold.`,
+                cls: 'cold', conf: 90, sent: 'neutral', urg: 2, why: 'Not a client: a student asking for data, with no open role and no budget.',
+                intent: 'A student wants placement data and fee information for research.', needs: ['Five years of placement data', 'Fee information', 'Purpose: a thesis'],
+                tone: 'Polite and casual. No urgency.', subj: 'Thanks for your message',
+                mail: `Hi Lena,\n\nThanks for reaching out. We do not share placement data or fee details outside client engagements, so we are not able to help with this request.\n\nWe wish you the best with the thesis.\n\nAll the best,\nThe Alder & Finch Search team`
+            }];
+        const ES = { said: 'Hola, queremos una agencia para mejorar nuestra publicidad en redes sociales.', subj: 'Gracias por contactarnos', body: 'Hola,\n\nGracias por escribirnos. Hemos recibido su mensaje sobre la publicidad en redes sociales y un miembro del equipo le responderá pronto.' };
+        const T = ['Start', 'The cost of waiting', 'Sound familiar?', 'Watch it work', 'You approve', 'Your team knows', 'Your free demo'];
+        const st = { b: 0, stage: 0, busy: 0, appr: 0, es: false, drafts: B.map(x => x.mail), out: {}, fl: null };
+        const $ = id => document.getElementById(id);
+        const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const pill = (c, t) => `<span class="pill ${c}">${(t || c).replace('_', ' ')}</span>`;
+        const idx = () => Math.min(Math.max((parseInt(location.hash.slice(1)) || 1) - 1, 0), T.length - 1);
+        const go = n => { location.hash = String(Math.min(Math.max(n, 0), T.length - 1) + 1) };
+        const head = (t, s) => `<h2>${t}</h2><p class="sub">${s}</p>`;
+        const picker = () => `<div class="pick">${B.map((x, n) => `<button data-b="${n}" class="${n === st.b ? 'on' : ''}">${x.tab}</button>`).join('')}</div>`;
+        const stat = b => st.out[b.id] || 'pending';
+        const D = n => `style="--d:${n}s"`;
+        const num = (v, s) => `<span data-n="${v}" data-s="${s || ''}">${v}${s || ''}</span>`;
+        const btn = (label, attr, busy, busyLabel, cls = '') => `<button class="btn ${cls}" ${attr} ${busy ? 'disabled' : ''}>${busy ? `<i class="sp"></i>${busyLabel}` : label}</button>`;
+        function slide(i) {
+            const b = B[st.b]; switch (i) {
+                case 0: return `<div><h1>You paid for the lead.<br>Then it sat in your inbox.</h1><p class="sub">Intake reads every message that comes in, decides if it is worth chasing, and writes the reply for you. You read it, tweak it, and tap approve.</p><div class="row" style="justify-content:flex-start;gap:12px;flex-wrap:wrap"><button class="btn" data-go="1">Show me how it works</button><button class="link" data-go="6">Skip to the free offer</button></div></div>`;
+                case 1: return `<div>${head('Waiting is the most expensive thing you do.', 'A Harvard Business Review study of 1.25 million inbound leads at 42 US companies found this:')}<div class="bento"><div class="card s4 in" ${D(.05)}><p class="big">${num(42, ' hours')}</p><p class="t" style="margin-bottom:14px">the average time companies took to reply, among those that replied at all</p><p class="lbl">A typical reply</p><div class="bar"><i class="fill" style="width:100%"></i></div><p class="lbl">An Intake draft, ready for you to approve</p><div class="bar" style="margin-bottom:0"><i class="fill" style="width:1.5%;--d:.9s"></i></div></div><div class="card s2 in" ${D(.25)}><p class="big">${num(7, 'x')}</p><p class="t">more likely to be a real, qualified prospect when someone replied within the hour</p></div><div class="card s6 in" ${D(.45)}><div class="row"><p class="t" style="flex:1"><b style="font-family:var(--data);color:var(--ac);filter:brightness(1.2);font-size:22px">${num(60, 'x+')}</b> more likely than when they waited a day or longer.</p></div></div></div><p class="small" style="margin-top:16px">Source: Harvard Business Review, "The Short Life of Online Sales Leads" (2011). Older data, and it shows a pattern across companies, not a promise for yours.</p></div>`;
+                case 2: return `<div class="pain">${head('Sound familiar?', '')}${['A lead messages you at 6:40pm. Nobody sees it until morning. By then they have talked to someone else.', 'Your best salesperson spends hours reading messages that were never going to buy.', 'Everyone on your team judges leads differently, so nobody is sure which ones to chase.'].map((x, n) => `<p class="in" ${D(n * .2)}>${x}</p>`).join('')}<div class="card in" ${D(.7)}><p class="t" style="margin-bottom:10px">You already paid to get those leads. Answering is the cheapest part, and it is where things break.</p><p class="t">You may have thought about AI auto-replies. One wrong email to a real prospect and it is your name on it. So Intake never sends anything on its own. You approve every reply.</p></div></div>`;
+                case 3: { const s = st.stage; return `<div>${head('Watch it read a lead.', 'Pick a business like yours, then let Intake take a look.')}${picker()}<div class="bento"><div class="card s4"><p class="lbl">New message from ${b.who}</p><p class="quote wipe">${b.msg}</p><div style="margin-top:14px">${b.form.map(f => `<span class="chip">${f}</span>`).join('')}</div></div><div class="card s2 in"><p class="lbl">Your rules for a good lead</p><p class="t">${b.rules}</p></div>${s < 1 ? `<div class="s6">${btn('Read this lead', 'data-run="1"', st.busy === 1, 'Reading…')}</div>` : `<div class="card s2 scan in" ${D(.1)}><p class="lbl">The verdict</p><p>${pill(b.cls, b.cls + ' lead')}</p><p class="small">${num(b.conf, '%')} sure</p><p class="t" style="margin-top:10px">${b.why}</p></div><div class="card s2 scan in" ${D(.5)}><p class="lbl">What they want</p><p class="t" style="margin-bottom:8px">${b.intent}</p><ul>${b.needs.map(n => `<li>${n}</li>`).join('')}</ul></div><div class="card s2 scan in" ${D(.9)}><p class="lbl">How urgent</p><p>${pill(b.sent)}<span class="small">${num(b.urg)} of 10</span></p><div class="bar" style="margin:10px 0"><i class="fill" style="width:${b.urg * 10}%;--d:1.1s"></i></div><p class="t">${b.tone}</p></div>${s < 2 ? `<div class="s6 in" ${D(1.3)}>${btn('Write the reply', 'data-run="2"', st.busy === 2, 'Writing…')}</div>` : `<div class="card s6 in"><p class="lbl">Draft reply: ${esc(b.subj)}</p><p class="t" style="white-space:pre-line">${esc(b.mail)}</p></div><div class="s6"><button class="link" data-es="1">${st.es ? 'Hide the Spanish example' : 'Writes in their language too'}</button>${st.es ? `<div class="card in"><p class="quote" style="margin-bottom:10px">${ES.said}</p><p class="small">The reply comes back in Spanish, and your team still sees the notes in English:</p><p class="t" style="margin:6px 0">${ES.subj}</p><p class="t" style="white-space:pre-line">${ES.body}</p></div>` : ''}</div><div class="s6"><button class="btn" data-go="4">Review and approve it</button></div>`}`}</div></div>` }
+                case 4: { const o = st.out[b.id]; return `<div>${head('You have the last word.', 'Change anything you like. Nothing is sent until you tap approve.')}${picker()}<div class="card"><div class="row" style="margin-bottom:12px"><span class="t">To: ${b.who}</span><span class="${o ? 'pop' : ''}">${pill(stat(b))}</span></div><textarea id="ta" rows="11" ${o || st.appr ? 'disabled' : ''}>${esc(st.drafts[st.b])}</textarea>${o ? `<div class="row" style="margin-top:14px"><p class="t">${o === 'sent' ? 'Approved. In the real system the email goes out now, with your edits.' : 'Skipped. Nothing was sent.'}</p><button class="link" data-reset="1">Try again</button></div>` : `<div class="row" style="margin-top:14px;gap:10px;flex-wrap:wrap">${btn('Approve and send', 'data-out="sent"', st.appr, 'Sending…', 'w')}<button class="btn glass" data-out="rejected" ${st.appr ? 'disabled' : ''}>Skip this one</button></div>`}</div></div>` }
+                case 5: { const c = { hot: '#FF5A5F', warm: '#F0A35E', cold: '#6BAEE6' }[b.cls]; return `<div>${head('Your team knows the second it lands.', 'The alert arrives in Slack. Approve or skip right there, from your phone, without opening anything else.')}${picker()}<div class="bento"><div class="card slack drop s3 ${b.cls}" style="--c:${c}"><p class="lbl">Slack</p><p class="t" style="font-weight:500">New ${b.cls} lead: ${b.who}</p><p class="t" style="margin:6px 0 12px">${b.intent}</p><div class="row" style="justify-content:flex-start;gap:8px;margin-bottom:12px"><button class="btn sm" data-out="sent">Approve</button><button class="btn sm glass" data-out="rejected">Skip</button></div><p class="small" style="border-top:1px solid var(--ln);padding-top:10px">Intake · ${b.firm} · Draft waiting for you</p></div><div class="card s3"><p class="lbl">Review queue</p>${B.map(x => `<div class="q row ${st.fl === x.id ? 'flash' : ''}"><div><p class="t">${x.who}</p><p class="small">${x.firm}</p></div><div>${pill(x.cls)}${pill(stat(x))}</div></div>`).join('')}</div><div class="card s6"><p class="t">It works behind the form you already use, so your customers see nothing new. Every message is saved the moment it arrives, so nothing gets lost on a busy day.</p></div></div></div>` }
+                default: return `<div>${head('Let me build it for you first. Free.', 'Every lead you get read, scored and answered in minutes, with you approving every word. Here is how I will prove it.')}<div class="card"><ul class="stack">${['A working demo of your exact lead process, in a 2-minute video, within 48 hours.', 'Built from your public website with made-up data. No logins, no access, no risk.', 'Your idea of a good lead written into the rules, in your words.', 'Nothing is ever sent without your approval.', 'Not clearly faster and safer than what you do now? You never hear from me again.', `Like it? We talk. Don't? You keep the blueprint, free.`].map((x, n) => `<li class="in" ${D(n * .14)}>${x}</li>`).join('')}</ul><p class="small" style="margin-top:6px">Cost: $0. I build each one by hand, so I only take a few at a time.</p></div><div class="card" style="margin:12px 0 22px"><p class="lbl">What happens next</p><ol class="steps"><li>Send me your lead form link, or two lines about how leads reach you today.</li><li>In 48 hours you get a video of your process, automated.</li><li>You decide. No pressure either way.</li></ol></div><div class="row" style="justify-content:flex-start;gap:12px;flex-wrap:wrap"><a class="btn" href="https://www.linkedin.com/in/jon-osaghae" target="_blank" rel="noopener noreferrer">Get my free demo on LinkedIn</a><a class="btn glass" href="mailto:johnnieosaghae@gmail.com?subject=My%20lead%20process&body=Here%20is%20how%20leads%20reach%20us%20today%3A%0A%0A(paste%20a%20link%20to%20your%20lead%20form%20or%20write%202-3%20lines)">Email it instead</a></div></div>`
+            }
+        }
+        function counts() { if (matchMedia('(prefers-reduced-motion:reduce)').matches) return; document.querySelectorAll('[data-n]').forEach(e => { const v = +e.dataset.n, s = e.dataset.s, t0 = performance.now(); (function f(t) { const p = Math.min((t - t0) / 900, 1); e.textContent = Math.round(v * (1 - Math.pow(1 - p, 3))) + s; if (p < 1) requestAnimationFrame(f) })(t0) }) }
+        // anim=false for re-renders that only change a button's state, so cards don't replay their entrance.
+        function render(anim = true) {
+            const i = idx(); $('m').classList.toggle('still', !anim); $('m').innerHTML = slide(i); $('ttl').textContent = T[i]; $('bk').disabled = i === 0; $('nx').disabled = i === T.length - 1;
+            $('dots').innerHTML = T.map((t, n) => `<button aria-label="Slide ${n + 1}: ${t}" data-go="${n}" class="${n === i ? 'on' : ''}"></button>`).join('');
+            const ta = $('ta'); if (ta) ta.oninput = () => { st.drafts[st.b] = ta.value }; if (anim) counts()
+        }
+        document.addEventListener('click', e => {
+            const t = e.target.closest('button,a'); if (!t || t.disabled) return; const d = t.dataset, id = B[st.b].id;
+            if (d.go !== undefined) { go(+d.go); return }
+            if (d.run) { st.busy = +d.run; render(false); setTimeout(() => { st.stage = +d.run; st.busy = 0; render(true) }, d.run === '1' ? 1300 : 1100); return }
+            if (d.out === 'sent' && idx() === 4) { st.appr = 1; render(false); setTimeout(() => { st.out[id] = 'sent'; st.fl = id; st.appr = 0; render(true) }, 900); return }
+            if (d.b !== undefined) { st.b = +d.b; st.stage = 0; st.es = false } else if (d.es) st.es = !st.es; else if (d.out) { st.out[id] = d.out; st.fl = id } else if (d.reset) { delete st.out[id]; st.fl = null } else return; render()
+        });
+        $('bk').onclick = () => go(idx() - 1); $('nx').onclick = () => go(idx() + 1); addEventListener('hashchange', () => { st.fl = null; render(); scrollTo(0, 0) });
+        addEventListener('keydown', e => { if (e.target.tagName === 'TEXTAREA') return; if (e.key === 'ArrowRight') go(idx() + 1); if (e.key === 'ArrowLeft') go(idx() - 1) });
+        let x0 = null; addEventListener('touchstart', e => { x0 = e.target.tagName === 'TEXTAREA' ? null : e.touches[0].clientX });
+        addEventListener('touchend', e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 70) go(idx() + (dx < 0 ? 1 : -1)); x0 = null });
+        render();
+    </script>
+</body>
+
+</html>
