@@ -11,10 +11,15 @@ export default function StatsStrip({ leads }: StatsStripProps) {
     const cold = leads.filter(l => l.classification === 'cold').length
     // The one number that tells you what to do next: drafts waiting on a person.
     const awaiting = leads.filter(
-        l => l.status === 'pending_review' || l.status === 'send_failed',
+        l =>
+            l.status === 'pending_review' ||
+            l.status === 'send_failed' ||
+            l.status === 'failed', // analysis failed: needs a person too
     ).length
-    const avgUrgency = total
-        ? (leads.reduce((sum, l) => sum + (l.urgency_score ?? 0), 0) / total).toFixed(1)
+    // Only leads that have actually been analyzed have an urgency score.
+    const scored = leads.filter(l => l.urgency_score !== null)
+    const avgUrgency = scored.length
+        ? (scored.reduce((sum, l) => sum + (l.urgency_score as number), 0) / scored.length).toFixed(1)
         : '—'
 
     const stats = [

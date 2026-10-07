@@ -51,8 +51,8 @@ function Row({ label, value }: { label: string; value: string | number }) {
 // ─────────────────────────────────────────────
 
 function ReviewPanel({ lead }: { lead: Lead }) {
-    const [subject, setSubject] = useState(lead.email_subject)
-    const [body, setBody] = useState(lead.email_body)
+    const [subject, setSubject] = useState(lead.email_subject ?? '')
+    const [body, setBody] = useState(lead.email_body ?? '')
     const [error, setError] = useState<string | null>(null)
     // Which button was pressed, so only that one shows the spinner.
     const [which, setWhich] = useState<'approve' | 'reject' | null>(null)
@@ -140,6 +140,10 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
 
     // The lead's raw answers, labeled by its tenant's config. Legacy rows
     // were backfilled into `fields`, so this works for them too.
+    // Leads that arrive through the webhook are saved first and analyzed after,
+    // so the AI fields can be empty (queued, processing or failed).
+    const analyzed = lead?.classification != null
+
     const submissionRows = lead ? fieldRows(fieldMap, lead.fields ?? {}) : []
 
     return (
@@ -191,22 +195,41 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                         {/* Body */}
                         <div className="px-8 py-6 space-y-6">
 
+                            {!analyzed && (
+                                <Section title="Analysis">
+                                    <p className="font-sans text-sm text-ink/80 leading-relaxed">
+                                        {lead.status === 'failed'
+                                            ? `Analysis failed after ${lead.attempts} attempt${lead.attempts === 1 ? '' : 's'}. The lead is saved, nothing was lost.`
+                                            : lead.status === 'processing'
+                                              ? 'Analysis is running. This usually takes a few seconds.'
+                                              : 'This lead is saved and waiting to be analyzed.'}
+                                    </p>
+                                    {lead.last_error && (
+                                        <p className="font-data text-[10px] tracking-wider text-[#ff6b6b] mt-3 break-words">
+                                            {lead.last_error}
+                                        </p>
+                                    )}
+                                </Section>
+                            )}
+
+                            {analyzed && (
+                                <>
                             <Section title="AI assessment">
                                 <div className="flex flex-wrap items-center gap-3 mb-4">
                                     <Badge value={lead.classification} />
                                     <Badge value={lead.sentiment} />
                                     <span className="font-data text-[10px] text-ghost">
-                                        Urgency {lead.urgency_score}/10
+                                        Urgency {lead.urgency_score ?? '—'}/10
                                     </span>
                                     <span className="font-data text-[10px] text-ghost ml-auto">
                                         {Math.round((lead.confidence ?? 0) * 100)}% confidence
                                     </span>
                                 </div>
-                                <Row label="Why" value={lead.reasoning} />
+                                <Row label="Why" value={lead.reasoning ?? ''} />
                             </Section>
 
                             <Section title="Intent and needs">
-                                <Row label="Primary intent" value={lead.intent} />
+                                <Row label="Primary intent" value={lead.intent ?? ''} />
                                 <div className="py-3.5 border-b border-white/[0.06]">
                                     <span className="font-data text-[9px] tracking-[0.2em] text-ghost uppercase block mb-3">
                                         Identified needs
@@ -222,8 +245,11 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                                         ))}
                                     </div>
                                 </div>
-                                <Row label="Tone notes" value={lead.tone_notes} />
+                                <Row label="Tone notes" value={lead.tone_notes ?? ''} />
                             </Section>
+
+                                                            </>
+                            )}
 
                             <Section title="Original message">
                                 <div className="border-l-2 border-accent pl-5">
@@ -244,13 +270,14 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                             )}
 
                             {/* Email draft — editable while reviewable, read-only after */}
+                            {analyzed && (
                             <Section title={reviewable ? 'Review draft' : 'Drafted response'}>
                                 {reviewable ? (
                                     <ReviewPanel key={lead.id} lead={lead} />
                                 ) : (
                                     <div className="space-y-4">
                                         <p className="font-data text-[10px] tracking-wider text-ghost">
-                                            Subject: <span className="text-ink">{lead.email_subject}</span>
+                                            Subject: <span className="text-ink">{lead.email_subject ?? ''}</span>
                                         </p>
                                         <div className="border-t border-white/[0.06] pt-4">
                                             <p className="font-sans text-sm text-ink/80 leading-relaxed whitespace-pre-line">
@@ -260,6 +287,7 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                                     </div>
                                 )}
                             </Section>
+                            )}
 
                             <Section title="Details">
                                 <Row
@@ -277,6 +305,9 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                                             hour: '2-digit', minute: '2-digit',
                                         })}
                                     />
+                                )}
+                                {lead.last_error && (
+                                    <Row label="Last analysis error" value={lead.last_error} />
                                 )}
                                 {lead.send_error && (
                                     <Row label="Last send error" value={lead.send_error} />

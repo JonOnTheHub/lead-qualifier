@@ -73,7 +73,7 @@ export default function LeadsTable({ leads, fieldMaps }: LeadsTableProps) {
                                     <Badge value={lead.sentiment} />
                                 </td>
                                 <td className="px-6 py-5 font-data text-sm text-ink">
-                                    {lead.urgency_score}/10
+                                    {lead.urgency_score !== null ? `${lead.urgency_score}/10` : '—'}
                                 </td>
                                 <td className="px-6 py-5">
                                     <Badge value={lead.status} />
