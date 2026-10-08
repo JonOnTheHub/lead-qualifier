@@ -83,7 +83,12 @@ export async function POST(
 
     // 5. SAVE IT FIRST
     // From this insert onward the lead is safe, whatever happens to the AI step.
-    const dedupeKey = makeDedupeKey(raw, req.headers.get('idempotency-key'))
+    // Optional: the tenant can name a field that carries the platform's own
+    // submission id (settings.dedupe_field), which then decides duplicates.
+    const dedupeField =
+        typeof tenant.settings?.dedupe_field === 'string' ? tenant.settings.dedupe_field : null
+    const fieldValue = dedupeField ? String(payload[dedupeField] ?? '') : null
+    const dedupeKey = makeDedupeKey(raw, req.headers.get('idempotency-key'), fieldValue)
     const supabase = createAdminClient()
 
     const { data: lead, error } = await supabase

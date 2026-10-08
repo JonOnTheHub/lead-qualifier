@@ -1,11 +1,16 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import StatsStrip from '@/components/admin/StatsStrip'
+import QueueControls from '@/components/admin/QueueControls'
 import LeadsTable from '@/components/admin/LeadsTable'
 import { Lead } from '@/types/lead'
 import type { FieldMap } from '@/types/tenant'
 
 // Always fetch fresh — never serve cached lead data from edge
 export const dynamic = 'force-dynamic'
+
+// Server actions called from this page (Retry, Process queue) run the AI
+// analysis, which takes several seconds per lead. They inherit this limit.
+export const maxDuration = 60
 
 export default async function AdminPage() {
     const supabase = createAdminClient()
@@ -26,6 +31,8 @@ export default async function AdminPage() {
             </div>
         )
     }
+
+    const all = leads as Lead[]
 
     // tenant_id -> field map, so the drawer can label each lead's fields.
     // If this lookup fails, the drawer falls back to prettified keys.
@@ -50,10 +57,19 @@ export default async function AdminPage() {
             </div>
 
             {/* Stats */}
-            <StatsStrip leads={leads as Lead[]} />
+            <StatsStrip leads={all} />
+
+            {/* Appears only when something is queued, analyzing or failed */}
+            <QueueControls
+                waiting={all.filter(l => l.status === 'queued').length}
+                analyzing={all.filter(l => l.status === 'processing').length}
+                failed={all.filter(l => l.status === 'failed').length}
+            />
 
             {/* Table */}
-            <LeadsTable leads={leads as Lead[]} fieldMaps={fieldMaps} />
+            <div className="mt-6">
+                <LeadsTable leads={all} fieldMaps={fieldMaps} />
+            </div>
 
         </main>
     )

@@ -19,6 +19,14 @@ export default function LeadsTable({ leads, fieldMaps }: LeadsTableProps) {
     const active = leads.find(l => l.id === activeId) ?? null
     const activeFieldMap = active?.tenant_id ? fieldMaps[active.tenant_id] : undefined
 
+    // How many leads this email has sent this tenant, so a repeat contact stands out.
+    const seen = new Map<string, number>()
+    for (const l of leads) {
+        const k = `${l.tenant_id}:${l.email.toLowerCase()}`
+        seen.set(k, (seen.get(k) ?? 0) + 1)
+    }
+    const timesSeen = (l: Lead) => seen.get(`${l.tenant_id}:${l.email.toLowerCase()}`) ?? 1
+
     if (leads.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-32">
@@ -55,6 +63,11 @@ export default function LeadsTable({ leads, fieldMaps }: LeadsTableProps) {
                                 <td className="px-6 py-5">
                                     <p className="font-sans text-sm text-ink">{lead.name}</p>
                                     <p className="font-sans text-xs text-ghost mt-0.5">{lead.email}</p>
+                                    {timesSeen(lead) > 1 && (
+                                        <p className="font-data text-[9px] tracking-[0.15em] text-accent uppercase mt-1.5">
+                                            Returning · {timesSeen(lead)} leads
+                                        </p>
+                                    )}
                                 </td>
                                 <td className="px-6 py-5 font-sans text-sm text-ghost">
                                     {/* The field can hold a whole paragraph, so cap the width
@@ -92,6 +105,7 @@ export default function LeadsTable({ leads, fieldMaps }: LeadsTableProps) {
             <LeadDrawer
                 lead={active}
                 fieldMap={activeFieldMap}
+                leadCount={active ? timesSeen(active) : 1}
                 onClose={() => setActiveId(null)}
             />
         </>

@@ -53,13 +53,23 @@ export function flatten(input: Payload, prefix = '', depth = 0, out: Payload = {
 // Form platforms resend a submission when they time out, so the same
 // submission can arrive twice. The database has a unique index on
 // (tenant, dedupe_key), which makes catching that atomic.
-//   - If the sender provides an Idempotency-Key header, that wins.
-//   - Otherwise it is a hash of the exact body plus today's date (UTC), so a
-//     resend within the day collapses, and an identical message sent weeks
-//     later still counts as a new lead.
-export function makeDedupeKey(raw: string, idempotencyKey: string | null): string {
+// Priority:
+//   1. An Idempotency-Key header from the sender.
+//   2. The tenant's own dedupe field (settings.dedupe_field), for platforms that
+//      send a stable submission id. This is the most accurate option: two
+//      different people with identical answers are still different submissions.
+//   3. A hash of the exact body plus today's date (UTC), so a resend within the
+//      day collapses and an identical message weeks later is a new lead.
+export function makeDedupeKey(
+    raw: string,
+    idempotencyKey: string | null,
+    fieldValue?: string | null,
+): string {
     if (idempotencyKey && idempotencyKey.trim()) {
         return `k:${idempotencyKey.trim().slice(0, 120)}`
+    }
+    if (fieldValue && fieldValue.trim()) {
+        return `f:${fieldValue.trim().slice(0, 120)}`
     }
     const day = new Date().toISOString().slice(0, 10)
     const hash = createHash('sha256').update(raw).digest('hex').slice(0, 32)

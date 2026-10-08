@@ -8,11 +8,13 @@ import type { FieldMap } from '@/types/tenant'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { fieldRows } from '@/lib/fields'
-import { approveLead, rejectLead } from '@/app/admin/actions'
+import { approveLead, rejectLead, retryLead } from '@/app/admin/actions'
 
 interface LeadDrawerProps {
     lead: Lead | null
     fieldMap?: FieldMap
+    // How many leads this email has sent in total (1 = first time).
+    leadCount?: number
     onClose: () => void
 }
 
@@ -134,7 +136,36 @@ function ReviewPanel({ lead }: { lead: Lead }) {
     )
 }
 
-export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps) {
+// For leads that never got analyzed: put it back in the queue and run it now.
+function RetryPanel({ leadId, label }: { leadId: string; label: string }) {
+    const [pending, startTransition] = useTransition()
+    const [error, setError] = useState<string | null>(null)
+
+    return (
+        <div className="mt-4">
+            <Button
+                loading={pending}
+                loadingLabel="Analyzing…"
+                onClick={() => {
+                    setError(null)
+                    startTransition(async () => {
+                        const res = await retryLead(leadId)
+                        if (!res.ok) setError(res.error)
+                        // On success the server revalidates /admin and the drawer
+                        // switches to the analyzed view on its own.
+                    })
+                }}
+            >
+                {label}
+            </Button>
+            {error && (
+                <p className="font-data text-[10px] tracking-wider text-[#ff6b6b] mt-3">{error}</p>
+            )}
+        </div>
+    )
+}
+
+export default function LeadDrawer({ lead, fieldMap, leadCount = 1, onClose }: LeadDrawerProps) {
     const reviewable =
         lead?.status === 'pending_review' || lead?.status === 'send_failed'
 
@@ -180,6 +211,11 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                                 <p className="font-sans text-xs text-ghost mt-0.5">
                                     {lead.email}
                                 </p>
+                                {leadCount > 1 && (
+                                    <p className="font-data text-[9px] tracking-[0.2em] text-accent uppercase mt-2">
+                                        Returning contact · {leadCount} leads
+                                    </p>
+                                )}
                             </div>
                             <div className="flex flex-col items-end gap-3">
                                 <button
@@ -208,6 +244,12 @@ export default function LeadDrawer({ lead, fieldMap, onClose }: LeadDrawerProps)
                                         <p className="font-data text-[10px] tracking-wider text-[#ff6b6b] mt-3 break-words">
                                             {lead.last_error}
                                         </p>
+                                    )}
+                                    {(lead.status === 'failed' || lead.status === 'queued') && (
+                                        <RetryPanel
+                                            leadId={lead.id}
+                                            label={lead.status === 'failed' ? 'Retry analysis' : 'Analyze now'}
+                                        />
                                     )}
                                 </Section>
                             )}
